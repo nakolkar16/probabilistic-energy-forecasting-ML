@@ -1,2 +1,16 @@
 .venv/
 data/raw/
+mlruns/
+notebooks/mlruns/
+
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Local Codex metadata
+.codex
+.codex/
