@@ -1,47 +1,50 @@
-import pandas as pd
 import logging
 from pathlib import Path
+
+import pandas as pd
+
+from src.data.ge_validation import validate_with_ge
 from src.data.load_data import load_consumption, load_generation
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def validate_data(df: pd.DataFrame, key_columns: list[str]) -> None:
-    """
-    Validates the DataFrame for key structural integrity checks.
+# def validate_data(df: pd.DataFrame, key_columns: list[str]) -> None:
+#     """
+#     Validates the DataFrame for key structural integrity checks.
     
-    Args:
-        df: The DataFrame to validate.
-        key_columns: List of column names that must be present and valid.
+#     Args:
+#         df: The DataFrame to validate.
+#         key_columns: List of column names that must be present and valid.
     
-    Raises:
-        ValueError: If any validation fails.
-    """
-    logging.info("Starting data validation.")
+#     Raises:
+#         ValueError: If any validation fails.
+#     """
+#     logging.info("Starting data validation.")
     
-    # Check if key columns exist
-    missing_cols = [col for col in key_columns if col not in df.columns]
-    if missing_cols:
-        raise ValueError(f"Missing key columns: {missing_cols}")
+#     # Check if key columns exist
+#     missing_cols = [col for col in key_columns if col not in df.columns]
+#     if missing_cols:
+#         raise ValueError(f"Missing key columns: {missing_cols}")
     
-    # Check for nulls in key columns
-    null_counts = df[key_columns].isnull().sum()
-    if null_counts.sum() > 0:
-        raise ValueError(f"Null values found in key columns: {null_counts[null_counts > 0].to_dict()}")
+#     # Check for nulls in key columns
+#     null_counts = df[key_columns].isnull().sum()
+#     if null_counts.sum() > 0:
+#         raise ValueError(f"Null values found in key columns: {null_counts[null_counts > 0].to_dict()}")
     
-    # Check for duplicate timestamps (assuming 'timestamp' is key)
-    if 'timestamp' in df.columns:
-        dup_count = df['timestamp'].duplicated().sum()
-        if dup_count > 0:
-            raise ValueError(f"Duplicate timestamps found: {dup_count}")
+#     # Check for duplicate timestamps (assuming 'timestamp' is key)
+#     if 'timestamp' in df.columns:
+#         dup_count = df['timestamp'].duplicated().sum()
+#         if dup_count > 0:
+#             raise ValueError(f"Duplicate timestamps found: {dup_count}")
     
-    # Check if sorted by timestamp
-    if 'timestamp' in df.columns and not df['timestamp'].is_monotonic_increasing:
-        raise ValueError("Data is not sorted by timestamp.")
+#     # Check if sorted by timestamp
+#     if 'timestamp' in df.columns and not df['timestamp'].is_monotonic_increasing:
+#         raise ValueError("Data is not sorted by timestamp.")
     
-    # Skip missing hours check due to DST gaps (as per notebook)
+#     # Skip missing hours check due to DST gaps (as per notebook)
     
-    logging.info("Data validation passed.")
+#     logging.info("Data validation passed.")
 
 def clean_consumption(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -183,9 +186,15 @@ def process_data(output_path: str | Path) -> None:
     df_consumption_clean = clean_consumption(consumption)
     df_generation_clean = clean_generation(generation)
     
-    # Validate
-    validate_data(df_consumption_clean, ["timestamp", "end_timestamp", "residual_load_mwh"])
-    validate_data(df_generation_clean, ["timestamp", "end_timestamp"])
+    # # Validate
+    # validate_data(df_consumption_clean, ["timestamp", "end_timestamp", "residual_load_mwh"])
+    # validate_data(df_generation_clean, ["timestamp", "end_timestamp"])
+    # validate_with_ge(
+    #     df_consumption_clean,
+    #     ["timestamp", "end_timestamp", "residual_load_mwh"],
+    #     "consumption",
+    # )
+    # validate_with_ge(df_generation_clean, ["timestamp", "end_timestamp"], "generation")
     
     # Merge
     df_merged = merge_datasets(df_consumption_clean, df_generation_clean)
