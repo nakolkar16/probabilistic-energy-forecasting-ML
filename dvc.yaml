@@ -1,0 +1,11 @@
+stages:
+  validate_data:
+    cmd: python src/data/data_validation.py
+    deps:
+      - data/processed/merged_data.parquet
+      - src/data/data_validation.py
+    outs:
+      - data/validated/validated_data.parquet
+    metrics:
+      - reports/data_quality_metrics.json:
+          cache: false
