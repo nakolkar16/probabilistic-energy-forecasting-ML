@@ -19,6 +19,10 @@ dependencies = [
     "fastapi>=0.109",
     "uvicorn[standard]>=0.27",
     "joblib>=1.3",
+    "lightgbm>=4.1,<5.0",
+    "matplotlib>=3.8,<4.0",
+    "seaborn>=0.13,<1.0",
+    "great-expectations>=0.18,<0.19"
 ]
 
 [project.optional-dependencies]
@@ -29,7 +33,6 @@ dev = [
     "mypy>=1.8",
     "pre-commit>=3.6",
     "httpx>=0.26",             # For testing FastAPI
-    "great-expectations>=0.18",
 ]
 
 [tool.ruff]
