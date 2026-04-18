@@ -1,11 +1,46 @@
 stages:
-  validate_data:
-    cmd: python src/data/data_validation.py
+  process_rawdata:
+    cmd: python -m src.data.data_processing
     deps:
-      - data/processed/merged_data.parquet
-      - src/data/data_validation.py
+      - src/data/data_processing.py
+      - src/data/load_data.py
+      - data/raw
+    params:
+      - global.seed
+      - data_processing.source_tz
+      - data_processing.target_tz
+      - data_processing.step_hours
     outs:
-      - data/validated/validated_data.parquet
+      - ${data_processing.output_path}
+
+  validate_data:
+    cmd: python -m src.data.data_validation
+    deps:
+      - src/data/data_validation.py
+      - ${validation.input_path}
+    params:
+      - validation.input_path
+      - validation.output_path
+      - validation.metrics_path
+      - validation.build_data_docs
+    outs:
+      - ${validation.output_path}
     metrics:
-      - reports/data_quality_metrics.json:
+      - ${validation.metrics_path}:
           cache: false
+
+  visualize_data:
+    cmd: python -m src.visualization.generate_figures
+    deps:
+      - src/visualization/generate_figures.py
+      - src/data/column_schema.py
+      - ${visualization.input_path}
+    params:
+      - visualization.input_path
+      - visualization.output_dir
+      - visualization.target
+      - visualization.top_corr_n
+      - visualization.heatmap_n
+      - visualization.dpi
+    outs:
+      - ${visualization.output_dir}
