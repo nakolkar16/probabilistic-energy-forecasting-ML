@@ -1,10 +1,15 @@
 import json
 import sys
+import yaml
 from pathlib import Path
 from typing import Any
 
 import great_expectations as gx
 import pandas as pd
+
+def load_params():
+    with open(Path("params.yaml"), "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
 
 
 def _get_pandas_datasource(context: Any):
@@ -145,18 +150,19 @@ def run_validation(input_path: str, output_path: str, metrics_path: str) -> bool
 
 
 if __name__ == "__main__":
+    params = load_params()
+    v = params["validation"]
+
     success = run_validation(
-        input_path="data/processed/merged_data.parquet",
-        output_path="data/validated/validated_data.parquet",
-        metrics_path="reports/data_quality_metrics.json",
+        input_path=v["input_path"],
+        output_path=v["output_path"],
+        metrics_path=v["metrics_path"],
     )
-    # Build data docs (HTML reports)
-    context = gx.get_context()
-    if hasattr(context, "build_data_docs"):
-        context.build_data_docs()
-        print("Data docs built. Open great_expectations/uncommitted/data_docs/local_site/index.html")
-    else:
-        print("Skipping data docs build (not available for this GX context type).")
+
+    if v.get("build_data_docs", True):
+        context = gx.get_context()
+        if hasattr(context, "build_data_docs"):
+            context.build_data_docs()
 
     if not success:
-        sys.exit(1)  # Fail the DVC stage
+        sys.exit(1)

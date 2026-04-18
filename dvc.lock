@@ -1,0 +1,84 @@
+schema: '2.0'
+stages:
+  process_rawdata:
+    cmd: python -m src.data.data_processing
+    deps:
+    - path: data/raw
+      hash: md5
+      md5: 585a8619ca537fd40eafbe409d3df652.dir
+      size: 3840018
+      nfiles: 2
+    - path: src/data/data_processing.py
+      hash: md5
+      md5: 1fb50d66966dca84f062595bc7e6f884
+      size: 5443
+    - path: src/data/load_data.py
+      hash: md5
+      md5: 6fefbe2db5730db7bf46870663db788a
+      size: 751
+    params:
+      params.yaml:
+        data_processing.source_tz: Europe/Berlin
+        data_processing.step_hours: 1
+        data_processing.target_tz: UTC
+        global.seed: 42
+    outs:
+    - path: data/processed/merged_data.parquet
+      hash: md5
+      md5: 81f025070858a2c2591687bbe8fa0813
+      size: 1739126
+  validate_data:
+    cmd: python -m src.data.data_validation
+    deps:
+    - path: data/processed/merged_data.parquet
+      hash: md5
+      md5: 81f025070858a2c2591687bbe8fa0813
+      size: 1739126
+    - path: src/data/data_validation.py
+      hash: md5
+      md5: 7443e4a2f0a0ddc1b07cb16ddf159a80
+      size: 6095
+    params:
+      params.yaml:
+        validation.build_data_docs: true
+        validation.input_path: data/processed/merged_data.parquet
+        validation.metrics_path: artifacts/metrics/data_quality_metrics.json
+        validation.output_path: data/validated/validated_data.parquet
+    outs:
+    - path: artifacts/metrics/data_quality_metrics.json
+      hash: md5
+      md5: 11659a1bef77486c9e662b9e005b9ab4
+      size: 172
+    - path: data/validated/validated_data.parquet
+      hash: md5
+      md5: 81f025070858a2c2591687bbe8fa0813
+      size: 1739126
+  visualize_data:
+    cmd: python -m src.visualization.generate_figures
+    deps:
+    - path: data/validated/validated_data.parquet
+      hash: md5
+      md5: 81f025070858a2c2591687bbe8fa0813
+      size: 1739126
+    - path: src/data/column_schema.py
+      hash: md5
+      md5: d500d354050d800ea5131b9097591a8d
+      size: 2962
+    - path: src/visualization/generate_figures.py
+      hash: md5
+      md5: 8b247f4055e545a6027fea2f171f457e
+      size: 13752
+    params:
+      params.yaml:
+        visualization.dpi: 150
+        visualization.heatmap_n: 6
+        visualization.input_path: data/validated/validated_data.parquet
+        visualization.output_dir: artifacts/figures
+        visualization.target: residual_load_mwh
+        visualization.top_corr_n: 12
+    outs:
+    - path: artifacts/figures
+      hash: md5
+      md5: eedb758bc0f35400680b43dd5483733b.dir
+      size: 829464
+      nfiles: 5

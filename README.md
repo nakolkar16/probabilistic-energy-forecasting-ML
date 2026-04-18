@@ -44,3 +44,28 @@ The target variable in this project is **residual load**, defined conceptually a
 **Residual Load = Electricity Demand - Wind Generation - Solar Generation**
 
 The forecast horizon is **day-ahead**, meaning the system predicts the next **24 hourly values**.
+
+## Key Visual Insights
+
+### 1) Residual Load Trend
+**Why this matters:** Lower residual load is better because it means more demand is already covered by wind and solar, reducing flexibility pressure on dispatchable resources.
+
+**Observation:** The hourly series is noisy, but the weekly trend line highlights sustained lower-residual periods. This supports using smoothed temporal features in the forecasting pipeline.
+
+![Residual load over time](artifacts/figures/residual_load_time_series.png)
+
+### 2) Monthly Residual Share of Grid Load
+
+**Why this matters:** Residual share is a direct KPI for renewable integration quality. Lower share is better.
+
+**Observation:** The best month in this dataset is **June 2025** at **40%** residual share (below 50%). Versus the same month in 2024 (**55%**), that is a **-15 percentage-point improvement**. Also, **February 2026** improved to **57%** versus **68.79%** in **February 2025** (**-11 pp YoY**).
+
+![Monthly residual share](artifacts/figures/monthly_residual_share_pct.png)
+
+### 3) Top Correlations With Residual Load
+
+**Why this matters:** This plot guides feature engineering for probabilistic forecasting.
+
+**Observation:** Conventional generation signals are strongly positively associated with residual load (e.g., `lignite_mwh` correlation **0.85**), while renewable proxies such as `photovoltaics_mwh` (**-0.53**) and `wind_onshore_mwh` (**-0.44**) move inversely, which is directionally consistent with the project target definition.
+
+![Top feature correlations](artifacts/figures/top_feature_correlations.png)
