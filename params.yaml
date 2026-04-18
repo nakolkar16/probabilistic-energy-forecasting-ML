@@ -1,0 +1,22 @@
+global:
+  seed: 42
+
+data_processing:
+  source_tz: Europe/Berlin
+  target_tz: UTC
+  step_hours: 1
+  output_path: data/processed/merged_data.parquet
+
+validation:
+  input_path: data/processed/merged_data.parquet
+  output_path: data/validated/validated_data.parquet
+  metrics_path: artifacts/metrics/data_quality_metrics.json
+  build_data_docs: true
+
+visualization:
+  input_path: data/validated/validated_data.parquet
+  output_dir: artifacts/figures
+  target: residual_load_mwh
+  top_corr_n: 12
+  heatmap_n: 6
+  dpi: 150
