@@ -82,3 +82,375 @@ stages:
       md5: eedb758bc0f35400680b43dd5483733b.dir
       size: 829464
       nfiles: 5
+  build_model_dataset:
+    cmd: python3 -m src.modeling.build_model_dataset
+    deps:
+    - path: data/validated/validated_data.parquet
+      hash: md5
+      md5: 81f025070858a2c2591687bbe8fa0813
+      size: 1739126
+    - path: src/modeling/build_model_dataset.py
+      hash: md5
+      md5: 8c9b41207018a7aba9caf307962c3fd7
+      size: 9209
+    - path: src/utils/reproducibility.py
+      hash: md5
+      md5: 9a3f8059fa4a691d462639ef5070d80f
+      size: 774
+    params:
+      params.yaml:
+        global.seed: 42
+        model_training.benchmark.locked_baseline: quantile_lag24_lag168_hour_dow
+        model_training.benchmark.tune.candidates:
+        - quantile_lag24_lag168
+        - quantile_lag24_lag168_hour_dow
+        - quantile_lag24_lag168_hour_dow_weekend
+        - quantile_lag24_lag168_hour_dow_gen
+        - quantile_lag24_lag168_hour_dow_weekend_gen
+        - quantile_lag24_lag168_hour_dow_weekend_season
+        - quantile_lag24_lag168_hour_dow_weekend_season_gen
+        model_training.generation_features:
+        - lignite_mwh
+        - fossil_gas_mwh
+        - hard_coal_mwh
+        - photovoltaics_mwh
+        - wind_onshore_mwh
+        - gen_hydro_pumped_storage_mwh
+        model_training.generation_lag_hours:
+        - 24
+        - 168
+        model_training.input_path: data/validated/validated_data.parquet
+        model_training.lags_hours:
+        - 24
+        - 168
+        model_training.lightgbm_tuning.candidates:
+        - lgbm_lag_only
+        - lgbm_lag_time
+        - lgbm_lag_time_weekend
+        - lgbm_lag_time_season
+        - lgbm_lag_time_gen_core
+        - lgbm_lag_time_gen
+        model_training.quantiles:
+        - 0.1
+        - 0.5
+        - 0.9
+        model_training.split.train_fraction: 0.8
+        model_training.target_col: residual_load_mwh
+        model_training.time_col: timestamp
+    outs:
+    - path: artifacts/stages/00_build_model_dataset
+      hash: md5
+      md5: b7a5077d187f713eb6fded4889949976.dir
+      size: 7949
+      nfiles: 3
+    - path: data/modeling/feature_metadata.json
+      hash: md5
+      md5: 971e83dc83c4ea71d7e46e20d50f3cba
+      size: 4386
+    - path: data/modeling/model_ready.parquet
+      hash: md5
+      md5: be1d304c94cc959984448f28f4d1028a
+      size: 3162107
+    - path: data/modeling/test.parquet
+      hash: md5
+      md5: 1e8e5db88d9518f54137e17df6fa0403
+      size: 739129
+    - path: data/modeling/train.parquet
+      hash: md5
+      md5: 270d77525f64fca9690b5d803c030945
+      size: 2404859
+  train_models:
+    cmd: python3 -m src.modeling.train_models
+    deps:
+    - path: data/modeling/feature_metadata.json
+      hash: md5
+      md5: 971e83dc83c4ea71d7e46e20d50f3cba
+      size: 4386
+    - path: data/modeling/test.parquet
+      hash: md5
+      md5: 1e8e5db88d9518f54137e17df6fa0403
+      size: 739129
+    - path: data/modeling/train.parquet
+      hash: md5
+      md5: 270d77525f64fca9690b5d803c030945
+      size: 2404859
+    - path: src/modeling/train_models.py
+      hash: md5
+      md5: f5271c13e57089472b54e2dec016f62c
+      size: 72415
+    - path: src/utils/reproducibility.py
+      hash: md5
+      md5: 9a3f8059fa4a691d462639ef5070d80f
+      size: 774
+    params:
+      params.yaml:
+        global.seed: 42
+        model_training.backtest.coverage_tolerance: 0.05
+        model_training.backtest.max_crossing_rate: 0.0
+        model_training.backtest.min_fold_coverage: 0.7
+        model_training.backtest.n_splits: 5
+        model_training.benchmark.tune.alpha_grid:
+        - 0.001
+        - 0.01
+        - 0.1
+        - 0.3
+        model_training.benchmark.tune.cv_splits: 3
+        model_training.benchmark.tune.enabled: true
+        model_training.lightgbm:
+          objective: quantile
+          learning_rate: 0.05
+          n_estimators: 200
+          num_leaves: 31
+          min_child_samples: 20
+          subsample: 0.9
+          colsample_bytree: 0.9
+          random_state: 42
+        model_training.lightgbm_tuning:
+          enabled: true
+          score_metric: pinball_mean
+          candidates:
+          - lgbm_lag_only
+          - lgbm_lag_time
+          - lgbm_lag_time_weekend
+          - lgbm_lag_time_season
+          - lgbm_lag_time_gen_core
+          - lgbm_lag_time_gen
+          race_cv_splits: 5
+          race_top_k: 4
+          use_full_train_if_small: true
+          small_data_threshold: 30000
+          fraction:
+            max_train_rows: 5000
+            cv_splits: 5
+          use_full_data_for_tuning: true
+          optuna_trials: 30
+          early_stopping_rounds: 50
+          significance_alpha: 0.05
+          out_of_time_recent_splits: 2
+          shap_sample_size: 500
+          random_state: 42
+          min_improvement_pct: 0.03
+          search_space:
+            learning_rate:
+              min: 0.01
+              max: 0.2
+            n_estimators:
+              min: 100
+              max: 400
+            num_leaves:
+              min: 15
+              max: 127
+            min_child_samples:
+              min: 10
+              max: 80
+            subsample:
+              min: 0.6
+              max: 1.0
+            colsample_bytree:
+              min: 0.6
+              max: 1.0
+            reg_alpha:
+              min: 0.0
+              max: 5.0
+            reg_lambda:
+              min: 0.0
+              max: 5.0
+        model_training.mlflow:
+          enabled: true
+          tracking_uri: mlruns
+          point_experiment: point_forecast_baselines
+          quantile_lag_experiment: quantile_regression_lag24_lag168
+          quantile_lag_time_experiment: 
+            quantile_regression_lag24_lag168_hour_dow
+          lightgbm_lag_time_experiment: lightgbm_quantile_lag24_lag168_hour_dow
+          lightgbm_lag_time_gen_experiment: 
+            lightgbm_quantile_lag24_lag168_hour_dow_generation
+          lightgbm_tuning_experiment: lightgbm_quantile_tuning
+        model_training.point_models.linear_regression.fit_intercept: true
+        model_training.quantile_regression.alpha: 0.01
+        model_training.quantile_regression.solver: highs
+        model_training.quantiles:
+        - 0.1
+        - 0.5
+        - 0.9
+        model_training.split.val_fraction_within_train: 0.2
+        model_training.target_col: residual_load_mwh
+    outs:
+    - path: artifacts/metrics/model_training_metrics.json
+      hash: md5
+      md5: f224a2068742efb24cad2b06db573348
+      size: 1390
+    - path: artifacts/models
+      hash: md5
+      md5: b367d470f733703c83519fc9aef2c4e8.dir
+      size: 285916
+      nfiles: 4
+    - path: artifacts/stages/01_baseline_screen_tune
+      hash: md5
+      md5: 9d19016d745e5815ca2e4ea08dc88494.dir
+      size: 8084
+      nfiles: 5
+    - path: artifacts/stages/02_lgbm_feature_screen
+      hash: md5
+      md5: 5c8b4dba187436df7340bfd68f2c50b3.dir
+      size: 4331
+      nfiles: 4
+    - path: artifacts/stages/03_lgbm_tuning
+      hash: md5
+      md5: f8d8cd29f361bdd3ddf5006f3bcb8374.dir
+      size: 4345
+      nfiles: 2
+    - path: artifacts/stages/04_test_check
+      hash: md5
+      md5: 76d0bb019225e7963d2debfd4bb70f2c.dir
+      size: 154413
+      nfiles: 6
+    - path: artifacts/stages/05_final_decision
+      hash: md5
+      md5: 49ba96ac9f1db5d790e4e19e1ce8479a.dir
+      size: 5110
+      nfiles: 6
+    - path: artifacts/stages/06_point_vs_p50_check
+      hash: md5
+      md5: 5163ad8eba5048641552a196ce9ab43d.dir
+      size: 373
+      nfiles: 2
+  predict:
+    cmd: python3 -m src.modeling.predict
+    deps:
+    - path: artifacts/models
+      hash: md5
+      md5: b367d470f733703c83519fc9aef2c4e8.dir
+      size: 285916
+      nfiles: 4
+    - path: data/modeling/feature_metadata.json
+      hash: md5
+      md5: 971e83dc83c4ea71d7e46e20d50f3cba
+      size: 4386
+    - path: data/modeling/test.parquet
+      hash: md5
+      md5: 1e8e5db88d9518f54137e17df6fa0403
+      size: 739129
+    - path: src/modeling/predict.py
+      hash: md5
+      md5: 1fc60c5b1e41120ad8e7c203dafb4c7d
+      size: 7214
+    params:
+      params.yaml:
+        model_training.inference.input_path: data/modeling/test.parquet
+        model_training.inference.manifest_path: 
+          artifacts/predictions/prediction_manifest.csv
+        model_training.inference.model_paths:
+          champion: artifacts/models/champion.joblib
+          challenger: artifacts/models/challenger_tuned.joblib
+          baseline: artifacts/models/baseline_locked.joblib
+        model_training.inference.output_dir: artifacts/predictions/models
+        model_training.inference.output_path: 
+          artifacts/predictions/champion_predictions.parquet
+        model_training.inference.primary_model: champion
+        model_training.quantiles:
+        - 0.1
+        - 0.5
+        - 0.9
+        model_training.target_col: residual_load_mwh
+        model_training.time_col: timestamp
+    outs:
+    - path: artifacts/predictions/champion_predictions.parquet
+      hash: md5
+      md5: e76378c98f077edff551fe5eb25be4c4
+      size: 192877
+    - path: artifacts/predictions/models
+      hash: md5
+      md5: e8898416bd6a4aa031da1bd2f7948671.dir
+      size: 573631
+      nfiles: 3
+    - path: artifacts/predictions/prediction_manifest.csv
+      hash: md5
+      md5: 870496335e6ee9c5cf5862f4d553c784
+      size: 568
+    - path: artifacts/stages/07_predict
+      hash: md5
+      md5: b57adf50a7a6485763be3d97743f904b.dir
+      size: 1189
+      nfiles: 3
+  evaluate_pilot:
+    cmd: python3 -m src.modeling.evaluate_pilot
+    deps:
+    - path: artifacts/predictions/models
+      hash: md5
+      md5: e8898416bd6a4aa031da1bd2f7948671.dir
+      size: 573631
+      nfiles: 3
+    - path: artifacts/predictions/prediction_manifest.csv
+      hash: md5
+      md5: 870496335e6ee9c5cf5862f4d553c784
+      size: 568
+    - path: src/modeling/evaluate_pilot.py
+      hash: md5
+      md5: 37d14a8930806cec148b2ff3285624f3
+      size: 7770
+    params:
+      params.yaml:
+        model_training.backtest.coverage_tolerance: 0.05
+        model_training.backtest.max_crossing_rate: 0.0
+        model_training.backtest.min_fold_coverage: 0.7
+        model_training.inference.manifest_path: 
+          artifacts/predictions/prediction_manifest.csv
+        model_training.inference.output_dir: artifacts/predictions/models
+        model_training.inference.pilot_metrics_path: 
+          artifacts/metrics/pilot_evaluation_metrics.json
+        model_training.quantiles:
+        - 0.1
+        - 0.5
+        - 0.9
+        model_training.target_col: residual_load_mwh
+    outs:
+    - path: artifacts/metrics/pilot_evaluation_metrics.json
+      hash: md5
+      md5: e4cd62915599bf6e30af8a6f2976fb31
+      size: 2317
+    - path: artifacts/stages/08_evaluate_pilot
+      hash: md5
+      md5: 027c090807d41ad7d4f178ce6c09c2c7.dir
+      size: 4352
+      nfiles: 4
+  plot_predictions:
+    cmd: python3 -m src.visualization.plot_predictions
+    deps:
+    - path: artifacts/predictions/models
+      hash: md5
+      md5: e8898416bd6a4aa031da1bd2f7948671.dir
+      size: 573631
+      nfiles: 3
+    - path: artifacts/predictions/prediction_manifest.csv
+      hash: md5
+      md5: 870496335e6ee9c5cf5862f4d553c784
+      size: 568
+    - path: src/visualization/plot_predictions.py
+      hash: md5
+      md5: 07c944e889b533fb0ac6beccd3364de1
+      size: 9010
+    params:
+      params.yaml:
+        model_training.inference.manifest_path: 
+          artifacts/predictions/prediction_manifest.csv
+        model_training.inference.output_dir: artifacts/predictions/models
+        model_training.inference.plot_dates:
+        - '2026-02-27'
+        - '2026-02-28'
+        - '2026-03-01'
+        model_training.inference.plot_timezone: Europe/Berlin
+        model_training.inference.primary_model: champion
+        model_training.target_col: residual_load_mwh
+        model_training.time_col: timestamp
+    outs:
+    - path: artifacts/figures/predictions
+      hash: md5
+      md5: d90fcde74b384f033c9c3b16efd4014f.dir
+      size: 2651334
+      nfiles: 13
+    - path: artifacts/stages/09_plot_predictions
+      hash: md5
+      md5: 969d025f96ed814cb332261adeccbe38.dir
+      size: 1853
+      nfiles: 1

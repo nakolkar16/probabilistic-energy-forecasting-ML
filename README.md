@@ -69,3 +69,37 @@ The forecast horizon is **day-ahead**, meaning the system predicts the next **24
 **Observation:** Conventional generation signals are strongly positively associated with residual load (e.g., `lignite_mwh` correlation **0.85**), while renewable proxies such as `photovoltaics_mwh` (**-0.53**) and `wind_onshore_mwh` (**-0.44**) move inversely, which is directionally consistent with the project target definition.
 
 ![Top feature correlations](artifacts/figures/top_feature_correlations.png)
+
+## Streamlit v0 (Inference Dashboard)
+
+This project includes a simple Streamlit app for forecast serving and monitoring:
+
+- `streamlit_app.py`
+
+### What it does
+
+- Loads prediction artifacts (champion/challenger/baseline)
+- Shows day-ahead P10/P50/P90 forecast chart + table
+- Compares models on pilot metrics
+- Shows pilot health and gate-pass status
+- Lets you refresh artifacts from app (`predict -> evaluate_pilot -> plot_predictions`)
+
+### Run locally
+
+1. Install Streamlit in your Poetry env:
+
+```bash
+poetry add streamlit
+```
+
+2. Make sure artifacts exist:
+
+```bash
+dvc repro predict evaluate_pilot plot_predictions
+```
+
+3. Start app:
+
+```bash
+poetry run streamlit run streamlit_app.py
+```

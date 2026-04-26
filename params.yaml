@@ -20,3 +20,150 @@ visualization:
   top_corr_n: 12
   heatmap_n: 6
   dpi: 150
+
+model_training:
+  input_path: data/validated/validated_data.parquet
+  target_col: residual_load_mwh
+  time_col: timestamp
+  lags_hours:
+    - 24
+    - 168
+  time_features:
+    - day_of_week
+    - hour
+  split:
+    train_fraction: 0.8
+    val_fraction_within_train: 0.2
+  backtest:
+    n_splits: 5
+    coverage_tolerance: 0.05
+    max_crossing_rate: 0.0
+    min_fold_coverage: 0.7
+  benchmark:
+    locked_baseline: quantile_lag24_lag168_hour_dow
+    tune:
+      enabled: true
+      candidates:
+        - quantile_lag24_lag168
+        - quantile_lag24_lag168_hour_dow
+        - quantile_lag24_lag168_hour_dow_weekend
+        - quantile_lag24_lag168_hour_dow_gen
+        - quantile_lag24_lag168_hour_dow_weekend_gen
+        - quantile_lag24_lag168_hour_dow_weekend_season
+        - quantile_lag24_lag168_hour_dow_weekend_season_gen
+      alpha_grid:
+        # - 0.0003
+        - 0.001
+        # - 0.003
+        - 0.01
+        # - 0.03
+        - 0.1
+        - 0.3
+      cv_splits: 3
+  quantiles:
+    - 0.1
+    - 0.5
+    - 0.9
+  point_models:
+    linear_regression:
+      fit_intercept: true
+  quantile_regression:
+    alpha: 0.01
+    solver: highs
+  generation_features:
+    - lignite_mwh
+    - fossil_gas_mwh
+    - hard_coal_mwh
+    - photovoltaics_mwh
+    - wind_onshore_mwh
+    - gen_hydro_pumped_storage_mwh
+  generation_lag_hours:
+    - 24
+    - 168
+  lightgbm:
+    objective: quantile
+    learning_rate: 0.05
+    n_estimators: 200
+    num_leaves: 31
+    min_child_samples: 20
+    subsample: 0.9
+    colsample_bytree: 0.9
+    random_state: 42
+  lightgbm_tuning:
+    enabled: true
+    score_metric: pinball_mean
+    candidates:
+      - lgbm_lag_only
+      - lgbm_lag_time
+      - lgbm_lag_time_weekend
+      - lgbm_lag_time_season
+      - lgbm_lag_time_gen_core
+      - lgbm_lag_time_gen
+    race_cv_splits: 5
+    race_top_k: 4
+    use_full_train_if_small: true
+    small_data_threshold: 30000
+    fraction:
+      max_train_rows: 5000
+      cv_splits: 5
+    use_full_data_for_tuning: true
+    optuna_trials: 30
+    early_stopping_rounds: 50
+    significance_alpha: 0.05
+    out_of_time_recent_splits: 2
+    shap_sample_size: 500
+    random_state: 42
+    min_improvement_pct: 0.03
+    search_space:
+      learning_rate:
+        min: 0.01
+        max: 0.2
+      n_estimators:
+        min: 100
+        max: 400
+      num_leaves:
+        min: 15
+        max: 127
+      min_child_samples:
+        min: 10
+        max: 80
+      subsample:
+        min: 0.6
+        max: 1.0
+      colsample_bytree:
+        min: 0.6
+        max: 1.0
+      reg_alpha:
+        min: 0.0
+        max: 5.0
+      reg_lambda:
+        min: 0.0
+        max: 5.0
+  mlflow:
+    enabled: true
+    tracking_uri: mlruns
+    point_experiment: point_forecast_baselines
+    quantile_lag_experiment: quantile_regression_lag24_lag168
+    quantile_lag_time_experiment: quantile_regression_lag24_lag168_hour_dow
+    lightgbm_lag_time_experiment: lightgbm_quantile_lag24_lag168_hour_dow
+    lightgbm_lag_time_gen_experiment: lightgbm_quantile_lag24_lag168_hour_dow_generation
+    lightgbm_tuning_experiment: lightgbm_quantile_tuning
+  inference:
+    input_path: data/modeling/test.parquet
+    output_dir: artifacts/predictions/models
+    manifest_path: artifacts/predictions/prediction_manifest.csv
+    # Backward-compatible copy for champion/primary model consumers.
+    output_path: artifacts/predictions/champion_predictions.parquet
+    # Keep multiple models in shadow mode for side-by-side comparison.
+    model_paths:
+      champion: artifacts/models/champion.joblib
+      challenger: artifacts/models/challenger_tuned.joblib
+      baseline: artifacts/models/baseline_locked.joblib
+    primary_model: champion
+    pilot_metrics_path: artifacts/metrics/pilot_evaluation_metrics.json
+    plot_timezone: Europe/Berlin
+    # Leave empty [] to plot the latest available local day.
+    # Add multiple dates to generate multiple plots.
+    # Example:
+    plot_dates: ["2026-02-27", "2026-02-28", "2026-03-01"]
+    # plot_dates: []

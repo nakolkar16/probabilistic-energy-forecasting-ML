@@ -1,0 +1,49 @@
+{
+  "locked_baseline": {
+    "name": "quantile_lag24_lag168_hour_dow_gen",
+    "alpha": 0.001,
+    "ref": {
+      "pinball_mean": 2397.043350824493,
+      "coverage": 0.7945323741007194,
+      "coverage_gap": -0.005467625899280626,
+      "crossing_rate": 0.0,
+      "r2_p50": 0.5288622652884648,
+      "coverage_min": 0.7355395683453237
+    }
+  },
+  "lgbm_winner_candidate": "lgbm_lag_time_gen",
+  "lgbm_tuned_params": {
+    "learning_rate": 0.09307352594320838,
+    "n_estimators": 296,
+    "num_leaves": 16,
+    "min_child_samples": 77,
+    "subsample": 0.7117402442626439,
+    "colsample_bytree": 0.8705209436879033,
+    "reg_alpha": 1.3113568940667688,
+    "reg_lambda": 3.360048596251981
+  },
+  "test_check": {
+    "baseline_pinball_mean": 2539.109261316253,
+    "winner_pinball_mean": 2659.710657698474
+  },
+  "final_decision": {
+    "champion_family": "quantile_regression",
+    "promote_challenger": false,
+    "improvement_pct_vs_baseline": -0.03362786746939833,
+    "significance_pvalue": 0.15547531026995434
+  },
+  "point_vs_p50": {
+    "point_metrics": {
+      "pinball_q50": 4274.937542421492,
+      "mae": 8549.875084842985,
+      "rmse": 10528.421711769592,
+      "r2": 0.44957360058027074
+    },
+    "champion_p50_metrics": {
+      "pinball_q50": 4149.436109390785,
+      "mae": 8298.87221878157,
+      "rmse": 10307.118217339139,
+      "r2": 0.47246992351271155
+    }
+  }
+}

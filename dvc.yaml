@@ -43,4 +43,134 @@ stages:
       - visualization.heatmap_n
       - visualization.dpi
     outs:
-      - ${visualization.output_dir}
+      - ${visualization.output_dir}/residual_load_time_series.png
+      - ${visualization.output_dir}/monthly_grid_vs_residual_twh.png
+      - ${visualization.output_dir}/monthly_residual_share_pct.png
+      - ${visualization.output_dir}/top_feature_correlations.png
+      - ${visualization.output_dir}/shortlisted_correlation_heatmap.png
+
+  build_model_dataset:
+    cmd: python3 -m src.modeling.build_model_dataset
+    deps:
+      - src/modeling/build_model_dataset.py
+      - src/utils/reproducibility.py
+      - ${model_training.input_path}
+    params:
+      - global.seed
+      - model_training.input_path
+      - model_training.target_col
+      - model_training.time_col
+      - model_training.lags_hours
+      - model_training.generation_features
+      - model_training.generation_lag_hours
+      - model_training.quantiles
+      - model_training.split.train_fraction
+      - model_training.benchmark.locked_baseline
+      - model_training.benchmark.tune.candidates
+      - model_training.lightgbm_tuning.candidates
+    outs:
+      - data/modeling/model_ready.parquet
+      - data/modeling/train.parquet
+      - data/modeling/test.parquet
+      - data/modeling/feature_metadata.json
+      - artifacts/stages/00_build_model_dataset
+
+  train_models:
+    cmd: python3 -m src.modeling.train_models
+    deps:
+      - src/modeling/train_models.py
+      - src/utils/reproducibility.py
+      - data/modeling/train.parquet
+      - data/modeling/test.parquet
+      - data/modeling/feature_metadata.json
+    params:
+      - global.seed
+      - model_training.target_col
+      - model_training.quantiles
+      - model_training.split.val_fraction_within_train
+      - model_training.backtest.n_splits
+      - model_training.backtest.coverage_tolerance
+      - model_training.backtest.max_crossing_rate
+      - model_training.backtest.min_fold_coverage
+      - model_training.benchmark.tune.enabled
+      - model_training.benchmark.tune.alpha_grid
+      - model_training.benchmark.tune.cv_splits
+      - model_training.quantile_regression.alpha
+      - model_training.quantile_regression.solver
+      - model_training.lightgbm
+      - model_training.lightgbm_tuning
+      - model_training.point_models.linear_regression.fit_intercept
+      - model_training.mlflow
+    outs:
+      - artifacts/stages/01_baseline_screen_tune
+      - artifacts/stages/02_lgbm_feature_screen
+      - artifacts/stages/03_lgbm_tuning
+      - artifacts/stages/04_test_check
+      - artifacts/stages/05_final_decision
+      - artifacts/stages/06_point_vs_p50_check
+      - artifacts/models
+    metrics:
+      - artifacts/metrics/model_training_metrics.json:
+          cache: false
+
+  predict:
+    cmd: python3 -m src.modeling.predict
+    deps:
+      - src/modeling/predict.py
+      - artifacts/models
+      - data/modeling/feature_metadata.json
+      - data/modeling/test.parquet
+    params:
+      - model_training.target_col
+      - model_training.time_col
+      - model_training.quantiles
+      - model_training.inference.input_path
+      - model_training.inference.output_dir
+      - model_training.inference.manifest_path
+      - model_training.inference.output_path
+      - model_training.inference.model_paths
+      - model_training.inference.primary_model
+    outs:
+      - artifacts/predictions/models
+      - artifacts/predictions/prediction_manifest.csv
+      - artifacts/predictions/champion_predictions.parquet
+      - artifacts/stages/07_predict
+
+  plot_predictions:
+    cmd: python3 -m src.visualization.plot_predictions
+    deps:
+      - src/visualization/plot_predictions.py
+      - artifacts/predictions/models
+      - artifacts/predictions/prediction_manifest.csv
+    params:
+      - model_training.target_col
+      - model_training.time_col
+      - model_training.inference.output_dir
+      - model_training.inference.manifest_path
+      - model_training.inference.primary_model
+      - model_training.inference.plot_timezone
+      - model_training.inference.plot_dates
+    outs:
+      - artifacts/figures/predictions
+      - artifacts/stages/09_plot_predictions
+
+  evaluate_pilot:
+    cmd: python3 -m src.modeling.evaluate_pilot
+    deps:
+      - src/modeling/evaluate_pilot.py
+      - artifacts/predictions/models
+      - artifacts/predictions/prediction_manifest.csv
+    params:
+      - model_training.target_col
+      - model_training.quantiles
+      - model_training.inference.output_dir
+      - model_training.inference.manifest_path
+      - model_training.inference.pilot_metrics_path
+      - model_training.backtest.coverage_tolerance
+      - model_training.backtest.max_crossing_rate
+      - model_training.backtest.min_fold_coverage
+    outs:
+      - artifacts/stages/08_evaluate_pilot
+    metrics:
+      - artifacts/metrics/pilot_evaluation_metrics.json:
+          cache: false
