@@ -62,6 +62,22 @@ def _resolve_prediction_files(paths: dict[str, Path]) -> list[tuple[str, Path]]:
     return rows
 
 
+def _manifest_metrics(paths: dict[str, Path]) -> dict[str, dict[str, float]]:
+    if not paths["manifest_path"].exists():
+        return {}
+
+    manifest_df = pd.read_csv(paths["manifest_path"])
+    metrics: dict[str, dict[str, float]] = {}
+    for _, rec in manifest_df.iterrows():
+        model_name = str(rec["model_name"])
+        model_metrics: dict[str, float] = {}
+        for col in ["raw_crossing_rate", "repaired_crossing_rate"]:
+            if col in manifest_df.columns and pd.notna(rec[col]):
+                model_metrics[col] = float(rec[col])
+        metrics[model_name] = model_metrics
+    return metrics
+
+
 def evaluate_pilot() -> None:
     params = load_params()
     cfg = params["model_training"]
@@ -79,6 +95,7 @@ def evaluate_pilot() -> None:
     pred_files = _resolve_prediction_files(paths)
     if not pred_files:
         raise ValueError("No prediction files found for pilot evaluation.")
+    manifest_metrics = _manifest_metrics(paths)
 
     quantile_rows_all: list[dict[str, Any]] = []
     summary_rows: list[dict[str, Any]] = []
@@ -115,7 +132,8 @@ def evaluate_pilot() -> None:
         low_pred = pred_df[quantile_cols[q_low]].to_numpy()
         high_pred = pred_df[quantile_cols[q_high]].to_numpy()
         q_matrix = np.column_stack([pred_df[quantile_cols[q]].to_numpy() for q in quantiles])
-        crossing_rate = float((np.diff(q_matrix, axis=1) < 0).any(axis=1).mean())
+        repaired_crossing_rate = float((np.diff(q_matrix, axis=1) < 0).any(axis=1).mean())
+        crossing_rate = manifest_metrics.get(model_name, {}).get("raw_crossing_rate", repaired_crossing_rate)
         coverage = float(((low_pred <= y_true) & (y_true <= high_pred)).mean())
         interval_width = float((high_pred - low_pred).mean())
         coverage_gap = float(coverage - nominal_coverage)
@@ -136,6 +154,8 @@ def evaluate_pilot() -> None:
             "coverage_gap": coverage_gap,
             "interval_width": interval_width,
             "crossing_rate": crossing_rate,
+            "raw_crossing_rate": crossing_rate,
+            "repaired_crossing_rate": repaired_crossing_rate,
             "coverage_gate_pass": bool(abs(coverage_gap) <= coverage_tolerance),
             "crossing_gate_pass": bool(crossing_rate <= max_crossing_rate),
             "min_coverage_gate_pass": bool(coverage >= min_fold_coverage),

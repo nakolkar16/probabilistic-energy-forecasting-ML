@@ -59,6 +59,11 @@ def _enforce_quantile_order(pred_map: dict[float, np.ndarray], quantiles: list[f
     return {q: ordered[:, i] for i, q in enumerate(quantiles)}
 
 
+def _quantile_crossing_rate(pred_map: dict[float, np.ndarray], quantiles: list[float]) -> float:
+    q_matrix = np.column_stack([pred_map[q] for q in quantiles])
+    return float((np.diff(q_matrix, axis=1) < 0).any(axis=1).mean())
+
+
 def _resolve_model_paths(cfg: dict[str, Any]) -> dict[str, Path]:
     infer_cfg = cfg.get("inference", {})
     model_paths_cfg = infer_cfg.get("model_paths", {})
@@ -109,11 +114,13 @@ def predict() -> None:
             model = _resolve_model(bundle["models"], q)
             pred_map[q] = np.asarray(model.predict(X), dtype=float)
 
+        raw_crossing_rate = _quantile_crossing_rate(pred_map, quantiles)
         pred_map = _enforce_quantile_order(pred_map, quantiles)
         pred_map[q_low] = pred_map[q_low] - qhat
         pred_map[q_high] = pred_map[q_high] + qhat
         pred_map = _enforce_quantile_order(pred_map, quantiles)
         pred_map = {q: np.clip(pred, target_lower, target_upper) for q, pred in pred_map.items()}
+        repaired_crossing_rate = _quantile_crossing_rate(pred_map, quantiles)
 
         out_df = pd.DataFrame(index=df.index)
         if time_col in df.columns:
@@ -145,6 +152,8 @@ def predict() -> None:
                 "model_family": str(bundle.get("family", "unknown")),
                 "quantiles": ",".join(str(q) for q in quantiles),
                 "qhat": qhat,
+                "raw_crossing_rate": raw_crossing_rate,
+                "repaired_crossing_rate": repaired_crossing_rate,
                 "rows_scored": int(len(out_df)),
             }
         )

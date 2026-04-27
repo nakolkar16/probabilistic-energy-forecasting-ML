@@ -77,11 +77,26 @@ stages:
         visualization.target: residual_load_mwh
         visualization.top_corr_n: 12
     outs:
-    - path: artifacts/figures
+    - path: artifacts/figures/monthly_grid_vs_residual_twh.png
       hash: md5
-      md5: eedb758bc0f35400680b43dd5483733b.dir
-      size: 829464
-      nfiles: 5
+      md5: 8ad41237a2d0338b7082b1b3b77c9ce7
+      size: 146149
+    - path: artifacts/figures/monthly_residual_share_pct.png
+      hash: md5
+      md5: 2dc510eed5262a1f30fd6df63e2f412a
+      size: 103895
+    - path: artifacts/figures/residual_load_time_series.png
+      hash: md5
+      md5: 4bd2b7e964e2940bbd3ce4a88d43a157
+      size: 313723
+    - path: artifacts/figures/shortlisted_correlation_heatmap.png
+      hash: md5
+      md5: 5d23eb3329235ba4a4b368e2f14e77ec
+      size: 151260
+    - path: artifacts/figures/top_feature_correlations.png
+      hash: md5
+      md5: 7536061f0df3ade49614c93a87ce446a
+      size: 114437
   build_model_dataset:
     cmd: python3 -m src.modeling.build_model_dataset
     deps:
@@ -260,11 +275,9 @@ stages:
           tracking_uri: mlruns
           point_experiment: point_forecast_baselines
           quantile_lag_experiment: quantile_regression_lag24_lag168
-          quantile_lag_time_experiment: 
-            quantile_regression_lag24_lag168_hour_dow
+          quantile_lag_time_experiment: quantile_regression_lag24_lag168_hour_dow
           lightgbm_lag_time_experiment: lightgbm_quantile_lag24_lag168_hour_dow
-          lightgbm_lag_time_gen_experiment: 
-            lightgbm_quantile_lag24_lag168_hour_dow_generation
+          lightgbm_lag_time_gen_experiment: lightgbm_quantile_lag24_lag168_hour_dow_generation
           lightgbm_tuning_experiment: lightgbm_quantile_tuning
         model_training.point_models.linear_regression.fit_intercept: true
         model_training.quantile_regression.alpha: 0.01
@@ -333,20 +346,18 @@ stages:
       size: 739129
     - path: src/modeling/predict.py
       hash: md5
-      md5: 1fc60c5b1e41120ad8e7c203dafb4c7d
-      size: 7214
+      md5: b04ffaa56783eb0d997657d0f367aa1d
+      size: 7720
     params:
       params.yaml:
         model_training.inference.input_path: data/modeling/test.parquet
-        model_training.inference.manifest_path: 
-          artifacts/predictions/prediction_manifest.csv
+        model_training.inference.manifest_path: artifacts/predictions/prediction_manifest.csv
         model_training.inference.model_paths:
           champion: artifacts/models/champion.joblib
           challenger: artifacts/models/challenger_tuned.joblib
           baseline: artifacts/models/baseline_locked.joblib
         model_training.inference.output_dir: artifacts/predictions/models
-        model_training.inference.output_path: 
-          artifacts/predictions/champion_predictions.parquet
+        model_training.inference.output_path: artifacts/predictions/champion_predictions.parquet
         model_training.inference.primary_model: champion
         model_training.quantiles:
         - 0.1
@@ -366,12 +377,12 @@ stages:
       nfiles: 3
     - path: artifacts/predictions/prediction_manifest.csv
       hash: md5
-      md5: 870496335e6ee9c5cf5862f4d553c784
-      size: 568
+      md5: 5cb73ba615e2221f1890d3a83024787d
+      size: 652
     - path: artifacts/stages/07_predict
       hash: md5
-      md5: b57adf50a7a6485763be3d97743f904b.dir
-      size: 1189
+      md5: 12e001ddfcc56c1d1b788923feb8cbba.dir
+      size: 1273
       nfiles: 3
   evaluate_pilot:
     cmd: python3 -m src.modeling.evaluate_pilot
@@ -383,22 +394,20 @@ stages:
       nfiles: 3
     - path: artifacts/predictions/prediction_manifest.csv
       hash: md5
-      md5: 870496335e6ee9c5cf5862f4d553c784
-      size: 568
+      md5: 5cb73ba615e2221f1890d3a83024787d
+      size: 652
     - path: src/modeling/evaluate_pilot.py
       hash: md5
-      md5: 37d14a8930806cec148b2ff3285624f3
-      size: 7770
+      md5: 2eed854bd68b5fb0cb894e38935a8949
+      size: 8671
     params:
       params.yaml:
         model_training.backtest.coverage_tolerance: 0.05
         model_training.backtest.max_crossing_rate: 0.0
         model_training.backtest.min_fold_coverage: 0.7
-        model_training.inference.manifest_path: 
-          artifacts/predictions/prediction_manifest.csv
+        model_training.inference.manifest_path: artifacts/predictions/prediction_manifest.csv
         model_training.inference.output_dir: artifacts/predictions/models
-        model_training.inference.pilot_metrics_path: 
-          artifacts/metrics/pilot_evaluation_metrics.json
+        model_training.inference.pilot_metrics_path: artifacts/metrics/pilot_evaluation_metrics.json
         model_training.quantiles:
         - 0.1
         - 0.5
@@ -407,12 +416,12 @@ stages:
     outs:
     - path: artifacts/metrics/pilot_evaluation_metrics.json
       hash: md5
-      md5: e4cd62915599bf6e30af8a6f2976fb31
-      size: 2317
+      md5: 98f6a5cc6add90a38723235f7d04c5fa
+      size: 2556
     - path: artifacts/stages/08_evaluate_pilot
       hash: md5
-      md5: 027c090807d41ad7d4f178ce6c09c2c7.dir
-      size: 4352
+      md5: 6ad462e3481eca71bd9944dceb604aea.dir
+      size: 4688
       nfiles: 4
   plot_predictions:
     cmd: python3 -m src.visualization.plot_predictions
@@ -424,16 +433,15 @@ stages:
       nfiles: 3
     - path: artifacts/predictions/prediction_manifest.csv
       hash: md5
-      md5: 870496335e6ee9c5cf5862f4d553c784
-      size: 568
+      md5: 5cb73ba615e2221f1890d3a83024787d
+      size: 652
     - path: src/visualization/plot_predictions.py
       hash: md5
       md5: 07c944e889b533fb0ac6beccd3364de1
       size: 9010
     params:
       params.yaml:
-        model_training.inference.manifest_path: 
-          artifacts/predictions/prediction_manifest.csv
+        model_training.inference.manifest_path: artifacts/predictions/prediction_manifest.csv
         model_training.inference.output_dir: artifacts/predictions/models
         model_training.inference.plot_dates:
         - '2026-02-27'
