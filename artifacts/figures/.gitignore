@@ -1,1 +1,6 @@
 /predictions
+/residual_load_time_series.png
+/monthly_grid_vs_residual_twh.png
+/monthly_residual_share_pct.png
+/top_feature_correlations.png
+/shortlisted_correlation_heatmap.png

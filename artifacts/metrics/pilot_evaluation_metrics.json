@@ -18,6 +18,8 @@
       "coverage_gap": -0.010011507479861903,
       "interval_width": 26233.845351376498,
       "crossing_rate": 0.0,
+      "raw_crossing_rate": 0.0,
+      "repaired_crossing_rate": 0.0,
       "coverage_gate_pass": true,
       "crossing_gate_pass": true,
       "min_coverage_gate_pass": true,
@@ -38,6 +40,8 @@
       "coverage_gap": -0.010011507479861903,
       "interval_width": 26233.845351376498,
       "crossing_rate": 0.0,
+      "raw_crossing_rate": 0.0,
+      "repaired_crossing_rate": 0.0,
       "coverage_gate_pass": true,
       "crossing_gate_pass": true,
       "min_coverage_gate_pass": true,
@@ -57,11 +61,13 @@
       "coverage": 0.7764672036823935,
       "coverage_gap": -0.02353279631760652,
       "interval_width": 26923.12941924947,
-      "crossing_rate": 0.0,
+      "crossing_rate": 0.0002876869965477,
+      "raw_crossing_rate": 0.0002876869965477,
+      "repaired_crossing_rate": 0.0,
       "coverage_gate_pass": true,
-      "crossing_gate_pass": true,
+      "crossing_gate_pass": false,
       "min_coverage_gate_pass": true,
-      "overall_gate_pass": true
+      "overall_gate_pass": false
     }
   ]
 }

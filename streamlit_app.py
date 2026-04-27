@@ -94,6 +94,24 @@ def build_model_labels(model_names: list[str]) -> dict[str, str]:
     return labels
 
 
+def approved_forecast_models(model_names: list[str], model_summary_df: pd.DataFrame | None) -> list[str]:
+    if model_summary_df is None or model_summary_df.empty or "model_name" not in model_summary_df.columns:
+        return model_names
+
+    gate_col = "overall_gate_pass" if "overall_gate_pass" in model_summary_df.columns else "crossing_gate_pass"
+    if gate_col not in model_summary_df.columns:
+        return model_names
+
+    gate_pass = model_summary_df[gate_col].map(lambda value: str(value).strip().lower() == "true")
+    passed = set(model_summary_df.loc[gate_pass, "model_name"].astype(str))
+    return [name for name in model_names if name in passed]
+
+
+def blocked_forecast_models(model_names: list[str], model_summary_df: pd.DataFrame | None) -> list[str]:
+    approved = set(approved_forecast_models(model_names, model_summary_df))
+    return [name for name in model_names if name not in approved]
+
+
 def resolve_q_model(model_map: dict[Any, Any], q: float = 0.5) -> Any:
     if q in model_map:
         return model_map[q]
@@ -138,31 +156,33 @@ def load_prediction_df(path: Path, time_col: str, plot_tz: str) -> pd.DataFrame:
     return df
 
 
-def day_plot(
-    day_df: pd.DataFrame,
+def forecast_plot(
+    forecast_df: pd.DataFrame,
     model_name: str,
     time_col_local: str,
     target_col: str,
     plot_tz: str,
+    horizon_hours: int,
 ) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(12, 4.8))
 
-    has_actual = target_col in day_df.columns and day_df[target_col].notna().any()
+    has_actual = target_col in forecast_df.columns and forecast_df[target_col].notna().any()
     if has_actual:
-        ax.plot(day_df[time_col_local], day_df[target_col], label="Actual", linewidth=2.0, color="#2F4858")
+        ax.plot(forecast_df[time_col_local], forecast_df[target_col], label="Actual", linewidth=2.0, color="#2F4858")
 
-    ax.plot(day_df[time_col_local], day_df["pred_q50"], label="Predicted p50", linewidth=2.0, color="#1F78B4")
+    ax.plot(forecast_df[time_col_local], forecast_df["pred_q50"], label="Predicted p50", linewidth=2.0, color="#1F78B4")
     ax.fill_between(
-        day_df[time_col_local],
-        day_df["pred_q10"],
-        day_df["pred_q90"],
+        forecast_df[time_col_local],
+        forecast_df["pred_q10"],
+        forecast_df["pred_q90"],
         alpha=0.18,
         label="p10-p90 band",
         color="#4EA3D8",
     )
 
-    day_label = str(pd.to_datetime(day_df[time_col_local]).dt.date.iloc[0])
-    ax.set_title(f"Day-ahead Forecast | {model_name} | {day_label}", fontsize=14, pad=12)
+    start_label = forecast_df[time_col_local].iloc[0].strftime("%Y-%m-%d %H:%M")
+    end_label = forecast_df[time_col_local].iloc[-1].strftime("%Y-%m-%d %H:%M")
+    ax.set_title(f"{horizon_hours}-Hour Forecast | {model_name} | {start_label} to {end_label}", fontsize=14, pad=12)
     ax.set_xlabel(f"Time ({plot_tz})")
     ax.set_ylabel("Residual Load (MWh)")
     ax.grid(alpha=0.25)
@@ -176,7 +196,7 @@ def page_overview() -> None:
     st.markdown(
         """
 ### What This Project Is About
-This project forecasts **German residual load** for the next 24 hours with uncertainty:
+This project forecasts **German residual load** over 24- or 48-hour windows with uncertainty:
 - **P10**: optimistic/low-load scenario
 - **P50**: central forecast
 - **P90**: conservative/high-load scenario
@@ -215,7 +235,16 @@ def page_forecast(
     st.subheader("Generate Forecast (Historical Replay Demo)")
 
     model_names = ordered_model_names([m for m, _ in pred_files])
-    options = [model_label_map.get(name, name) for name in model_names]
+    approved_models = approved_forecast_models(model_names, model_summary_df)
+    blocked_models = blocked_forecast_models(model_names, model_summary_df)
+    if blocked_models:
+        blocked_labels = ", ".join(model_label_map.get(name, name) for name in blocked_models)
+        st.warning(f"Blocked from forecast display because validation gates failed: {blocked_labels}")
+    if not approved_models:
+        st.error("No approved models are available for forecast display. Check Model Compare or Pilot Health.")
+        return
+
+    options = [model_label_map.get(name, name) for name in approved_models]
     selected_label = st.selectbox("Model", options, index=0)
     selected_model = {v: k for k, v in model_label_map.items()}[selected_label]
     selected_path = dict(pred_files)[selected_model]
@@ -226,17 +255,24 @@ def page_forecast(
 
     pred_df = load_prediction_df(selected_path, time_col=time_col, plot_tz=plot_tz)
     available_dates = sorted(pred_df["time_local"].dt.date.unique().tolist())
-    selected_date = st.selectbox("Forecast Date", available_dates, index=len(available_dates) - 1)
+    selected_date = st.selectbox("Forecast Start Date", available_dates, index=len(available_dates) - 1)
+    horizon_hours = st.radio("Forecast Window", [24, 48], horizontal=True, index=0)
 
-    day_df = pred_df[pred_df["time_local"].dt.date == selected_date].copy()
-    if day_df.empty:
-        st.warning("No data for selected date.")
+    window_start = pd.Timestamp(selected_date, tz=plot_tz)
+    window_end = window_start + pd.Timedelta(hours=int(horizon_hours))
+    forecast_df = pred_df[
+        (pred_df["time_local"] >= window_start) & (pred_df["time_local"] < window_end)
+    ].copy()
+    if forecast_df.empty:
+        st.warning("No data for selected forecast window.")
         return
+    if len(forecast_df) < int(horizon_hours):
+        st.info(f"Selected window has {len(forecast_df)} rows available out of {horizon_hours} expected hours.")
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Rows (Selected Day)", len(day_df))
-    c2.metric("Average Predicted p50", f"{day_df['pred_q50'].mean():,.0f}")
-    c3.metric("Average Uncertainty Width", f"{(day_df['pred_q90'] - day_df['pred_q10']).mean():,.0f}")
+    c1.metric("Rows (Selected Window)", len(forecast_df))
+    c2.metric("Average Predicted p50", f"{forecast_df['pred_q50'].mean():,.0f}")
+    c3.metric("Average Uncertainty Width", f"{(forecast_df['pred_q90'] - forecast_df['pred_q10']).mean():,.0f}")
 
     # Traffic-light gate panel from latest pilot evaluation metrics for selected model.
     if model_summary_df is not None and not model_summary_df.empty and "model_name" in model_summary_df.columns:
@@ -260,47 +296,48 @@ def page_forecast(
             g2.markdown(gate_html("Crossing Gate", bool(gate_row.get("crossing_gate_pass", False))), unsafe_allow_html=True)
             g3.markdown(gate_html("Overall Gate", bool(gate_row.get("overall_gate_pass", False))), unsafe_allow_html=True)
 
-    fig = day_plot(
-        day_df=day_df,
+    fig = forecast_plot(
+        forecast_df=forecast_df,
         model_name=selected_label,
         time_col_local="time_local",
         target_col=target_col,
         plot_tz=plot_tz,
+        horizon_hours=int(horizon_hours),
     )
     st.pyplot(fig, clear_figure=True)
 
     # Additional visual: uncertainty width by hour
     width_fig, width_ax = plt.subplots(figsize=(12, 3.4))
-    width_df = day_df.copy()
-    width_df["hour"] = width_df["time_local"].dt.strftime("%H:%M")
+    width_df = forecast_df.copy()
+    width_df["hour"] = width_df["time_local"].dt.strftime("%m-%d %H:%M")
     width_df["width"] = width_df["pred_q90"] - width_df["pred_q10"]
     width_ax.bar(width_df["hour"], width_df["width"], color="#7FB3D5")
     width_ax.set_title("Uncertainty Width by Hour (p90 - p10)", fontsize=12)
-    width_ax.set_xlabel(f"Hour ({plot_tz})")
+    width_ax.set_xlabel(f"Time ({plot_tz})")
     width_ax.set_ylabel("Width (MWh)")
     width_ax.tick_params(axis="x", rotation=45)
     width_fig.tight_layout()
     st.pyplot(width_fig, clear_figure=True)
 
     # Additional visual: residual error (actual - p50)
-    has_actual = target_col in day_df.columns and day_df[target_col].notna().any()
+    has_actual = target_col in forecast_df.columns and forecast_df[target_col].notna().any()
     if has_actual:
         err_fig, err_ax = plt.subplots(figsize=(12, 3.6))
-        err_df = day_df.copy()
-        err_df["hour"] = err_df["time_local"].dt.strftime("%H:%M")
+        err_df = forecast_df.copy()
+        err_df["hour"] = err_df["time_local"].dt.strftime("%m-%d %H:%M")
         err_df["residual_error"] = err_df[target_col] - err_df["pred_q50"]
         colors = np.where(err_df["residual_error"] >= 0, "#4CAF50", "#E57373")
         err_ax.bar(err_df["hour"], err_df["residual_error"], color=colors)
         err_ax.axhline(0, color="#333333", linewidth=1.2)
         err_ax.set_title("Residual Error by Hour (Actual - p50)", fontsize=12)
-        err_ax.set_xlabel(f"Hour ({plot_tz})")
+        err_ax.set_xlabel(f"Time ({plot_tz})")
         err_ax.set_ylabel("Error (MWh)")
         err_ax.tick_params(axis="x", rotation=45)
         err_fig.tight_layout()
         st.pyplot(err_fig, clear_figure=True)
 
     # Top 3 risky hours (largest interval width)
-    risky_df = day_df.copy()
+    risky_df = forecast_df.copy()
     risky_df["interval_width"] = risky_df["pred_q90"] - risky_df["pred_q10"]
     risky_df["hour_local"] = risky_df["time_local"].dt.strftime("%Y-%m-%d %H:%M")
     top_risky = risky_df.sort_values("interval_width", ascending=False).head(3)
@@ -333,16 +370,16 @@ def page_forecast(
                 st.warning(f"Could not load feature importance for {selected_label}: {exc}")
 
     cols = ["time_local", "pred_q10", "pred_q50", "pred_q90"]
-    if target_col in day_df.columns:
+    if target_col in forecast_df.columns:
         cols.insert(1, target_col)
-    show_df = day_df[cols].copy().rename(columns={"time_local": f"time_{plot_tz}"})
+    show_df = forecast_df[cols].copy().rename(columns={"time_local": f"time_{plot_tz}"})
     st.dataframe(show_df, use_container_width=True)
 
     csv_bytes = show_df.to_csv(index=False).encode("utf-8")
     st.download_button(
-        "Download CSV (selected day)",
+        "Download CSV (selected window)",
         data=csv_bytes,
-        file_name=f"{selected_model}_forecast_{selected_date}.csv",
+        file_name=f"{selected_model}_forecast_{selected_date}_{horizon_hours}h.csv",
         mime="text/csv",
     )
 
@@ -372,6 +409,9 @@ def page_model_compare(model_summary_df: pd.DataFrame | None, model_label_map: d
         "crossing_rate",
         "overall_gate_pass",
     ]
+    for col in ["raw_crossing_rate", "repaired_crossing_rate"]:
+        if col in view_df.columns and col not in show_cols:
+            show_cols.insert(show_cols.index("overall_gate_pass"), col)
     st.dataframe(view_df[show_cols].sort_values("pinball_mean"), use_container_width=True)
 
     metric = st.selectbox("Metric for Bar Chart", ["pinball_mean", "mae_p50", "rmse_p50", "coverage"])
@@ -402,6 +442,9 @@ def page_pilot_health(pilot_metrics: dict[str, Any] | None, model_label_map: dic
             "crossing_rate",
             "overall_gate_pass",
         ]
+        for col in ["raw_crossing_rate", "repaired_crossing_rate"]:
+            if col in health_df.columns and col not in cols:
+                cols.insert(cols.index("overall_gate_pass"), col)
         st.dataframe(health_df[cols].sort_values("pinball_mean"), use_container_width=True)
 
 
