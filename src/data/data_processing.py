@@ -15,6 +15,13 @@ def load_params():
     with open(Path("params.yaml"), "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+
+def normalize_timestamp_series(series: pd.Series, source_tz: str, target_tz: str) -> pd.Series:
+    if series.dt.tz is None:
+        return series.dt.tz_localize(source_tz, ambiguous="infer", nonexistent="shift_forward").dt.tz_convert(target_tz)
+    return series.dt.tz_convert(target_tz)
+
+
 def clean_consumption(df, source_tz: str, target_tz: str, step_hours: int):
     """
     Cleans the consumption DataFrame.
@@ -35,15 +42,9 @@ def clean_consumption(df, source_tz: str, target_tz: str, step_hours: int):
     # Convert numeric columns
     date_cols = ["timestamp", "end_timestamp"]
     numeric_cols = [col for col in df_clean.columns if col not in date_cols]
-    df_clean[numeric_cols] = df_clean[numeric_cols].apply(
-        lambda col: pd.to_numeric(col.astype(str).str.replace(",", "", regex=False), errors="coerce")
-    )
+    df_clean[numeric_cols] = df_clean[numeric_cols].apply(pd.to_numeric, errors="coerce")
     # Localize to UTC
-    df_clean["timestamp"] = (
-        df_clean["timestamp"]
-        .dt.tz_localize(source_tz, ambiguous="infer", nonexistent="shift_forward")
-        .dt.tz_convert(target_tz)
-    )
+    df_clean["timestamp"] = normalize_timestamp_series(df_clean["timestamp"], source_tz, target_tz)
     df_clean["end_timestamp"] = df_clean["timestamp"] + pd.Timedelta(hours=step_hours)
     
     logging.info("Consumption data cleaned.")
@@ -68,15 +69,9 @@ def clean_generation(df, source_tz: str, target_tz: str, step_hours: int):
     # Convert numeric columns
     date_cols = ["timestamp", "end_timestamp"]
     numeric_cols = [col for col in df_clean.columns if col not in date_cols]
-    df_clean[numeric_cols] = df_clean[numeric_cols].apply(
-        lambda col: pd.to_numeric(col.astype(str).str.replace(",", "", regex=False), errors="coerce")
-    )
+    df_clean[numeric_cols] = df_clean[numeric_cols].apply(pd.to_numeric, errors="coerce")
     # Localize to UTC
-    df_clean["timestamp"] = (
-        df_clean["timestamp"]
-        .dt.tz_localize(source_tz, ambiguous="infer", nonexistent="shift_forward")
-        .dt.tz_convert(target_tz)
-    )
+    df_clean["timestamp"] = normalize_timestamp_series(df_clean["timestamp"], source_tz, target_tz)
     df_clean["end_timestamp"] = df_clean["timestamp"] + pd.Timedelta(hours=step_hours)
 
     logging.info("Generation data cleaned.")
