@@ -45,6 +45,21 @@ The target variable in this project is **residual load**, defined conceptually a
 
 The forecast horizon is **day-ahead**, meaning the system predicts the next **24 hourly values**.
 
+## Modeling Notes
+
+Prediction intervals are split-conformal calibrated using a held-out calibration slice. The calibration value (`qhat`) widens the lower and upper quantiles to improve empirical coverage. Quantile-order repair is then applied before evaluation and inference outputs are saved, so gates use the same repaired intervals that the app displays. Forecast outputs are not clipped to training bounds.
+
+The training pipeline follows a simplified conservative champion workflow:
+
+1. Use one fixed cyclic quantile-regression baseline as the fallback/reference model.
+2. Run full probabilistic time-series CV for four LightGBM feature sets.
+3. Tune the top two LightGBM feature sets with the same Optuna budget.
+4. Compare the fixed baseline against both tuned challengers.
+5. Promote only a challenger that beats baseline and passes quality gates; otherwise keep the baseline as fallback and report that no approved champion exists.
+6. Evaluate frozen artifacts on the held-out test period once as a final report.
+
+The held-out test period is not used for model selection.
+
 ## Key Visual Insights
 
 ### 1) Residual Load Trend
@@ -69,3 +84,38 @@ The forecast horizon is **day-ahead**, meaning the system predicts the next **24
 **Observation:** Conventional generation signals are strongly positively associated with residual load (e.g., `lignite_mwh` correlation **0.85**), while renewable proxies such as `photovoltaics_mwh` (**-0.53**) and `wind_onshore_mwh` (**-0.44**) move inversely, which is directionally consistent with the project target definition.
 
 ![Top feature correlations](artifacts/figures/top_feature_correlations.png)
+
+## Streamlit v0 (Inference Dashboard)
+
+This project includes a simple Streamlit app for forecast serving and monitoring:
+
+- `streamlit_app.py`
+
+### What it does
+
+- Loads prediction artifacts (champion/challenger_1/challenger_2/baseline)
+- Shows day-ahead P10/P50/P90 forecast chart + table
+- Compares models on pilot metrics
+- Shows pilot health and gate-pass status
+- Lets you refresh artifacts from app (`predict -> evaluate_pilot -> plot_predictions`)
+- Displays conformal-calibrated, quantile-order-repaired intervals without clipping
+
+### Run locally
+
+1. Install Streamlit in your Poetry env:
+
+```bash
+poetry add streamlit
+```
+
+2. Make sure artifacts exist:
+
+```bash
+dvc repro predict evaluate_pilot plot_predictions
+```
+
+3. Start app:
+
+```bash
+poetry run streamlit run streamlit_app.py
+```

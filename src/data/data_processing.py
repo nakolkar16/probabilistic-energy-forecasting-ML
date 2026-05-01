@@ -15,6 +15,13 @@ def load_params():
     with open(Path("params.yaml"), "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
+
+def normalize_timestamp_series(series: pd.Series, source_tz: str, target_tz: str) -> pd.Series:
+    if series.dt.tz is None:
+        return series.dt.tz_localize(source_tz, ambiguous="infer", nonexistent="shift_forward").dt.tz_convert(target_tz)
+    return series.dt.tz_convert(target_tz)
+
+
 def clean_consumption(df, source_tz: str, target_tz: str, step_hours: int):
     """
     Cleans the consumption DataFrame.
@@ -35,15 +42,9 @@ def clean_consumption(df, source_tz: str, target_tz: str, step_hours: int):
     # Convert numeric columns
     date_cols = ["timestamp", "end_timestamp"]
     numeric_cols = [col for col in df_clean.columns if col not in date_cols]
-    df_clean[numeric_cols] = df_clean[numeric_cols].apply(
-        lambda col: pd.to_numeric(col.astype(str).str.replace(",", "", regex=False), errors="coerce")
-    )
+    df_clean[numeric_cols] = df_clean[numeric_cols].apply(pd.to_numeric, errors="coerce")
     # Localize to UTC
-    df_clean["timestamp"] = (
-        df_clean["timestamp"]
-        .dt.tz_localize(source_tz, ambiguous="infer", nonexistent="shift_forward")
-        .dt.tz_convert(target_tz)
-    )
+    df_clean["timestamp"] = normalize_timestamp_series(df_clean["timestamp"], source_tz, target_tz)
     df_clean["end_timestamp"] = df_clean["timestamp"] + pd.Timedelta(hours=step_hours)
     
     logging.info("Consumption data cleaned.")
@@ -68,21 +69,58 @@ def clean_generation(df, source_tz: str, target_tz: str, step_hours: int):
     # Convert numeric columns
     date_cols = ["timestamp", "end_timestamp"]
     numeric_cols = [col for col in df_clean.columns if col not in date_cols]
-    df_clean[numeric_cols] = df_clean[numeric_cols].apply(
-        lambda col: pd.to_numeric(col.astype(str).str.replace(",", "", regex=False), errors="coerce")
-    )
+    df_clean[numeric_cols] = df_clean[numeric_cols].apply(pd.to_numeric, errors="coerce")
     # Localize to UTC
-    df_clean["timestamp"] = (
-        df_clean["timestamp"]
-        .dt.tz_localize(source_tz, ambiguous="infer", nonexistent="shift_forward")
-        .dt.tz_convert(target_tz)
-    )
+    df_clean["timestamp"] = normalize_timestamp_series(df_clean["timestamp"], source_tz, target_tz)
     df_clean["end_timestamp"] = df_clean["timestamp"] + pd.Timedelta(hours=step_hours)
 
     logging.info("Generation data cleaned.")
     return df_clean
 
-def merge_datasets(df_consumption: pd.DataFrame, df_generation: pd.DataFrame) -> pd.DataFrame:
+def validate_hourly_utc_continuity(
+    df: pd.DataFrame,
+    time_col: str = "timestamp",
+    end_time_col: str = "end_timestamp",
+    step_hours: int = 1,
+    target_tz: str = "UTC",
+) -> None:
+    timestamps = pd.to_datetime(df[time_col], utc=False)
+    if timestamps.dt.tz is None:
+        raise ValueError(f"{time_col} must be timezone-aware after merge.")
+
+    actual_tz = str(timestamps.dt.tz)
+    if target_tz.upper() == "UTC" and actual_tz not in {"UTC", "datetime64[ns, UTC]"}:
+        raise ValueError(f"{time_col} must be UTC after merge, got {actual_tz}.")
+
+    if timestamps.duplicated().any():
+        duplicate_count = int(timestamps.duplicated().sum())
+        raise ValueError(f"{time_col} has {duplicate_count} duplicate rows after merge.")
+
+    sorted_ts = timestamps.sort_values().reset_index(drop=True)
+    expected_step = pd.Timedelta(hours=step_hours)
+    deltas = sorted_ts.diff().dropna()
+    bad_steps = deltas[deltas != expected_step]
+    if not bad_steps.empty:
+        first_bad_idx = int(bad_steps.index[0])
+        raise ValueError(
+            f"{time_col} is not continuous hourly UTC after merge. "
+            f"First bad step: {sorted_ts.iloc[first_bad_idx - 1]} -> {sorted_ts.iloc[first_bad_idx]} "
+            f"({bad_steps.iloc[0]})."
+        )
+
+    expected_end = timestamps + expected_step
+    end_timestamps = pd.to_datetime(df[end_time_col], utc=False)
+    if not end_timestamps.equals(expected_end):
+        mismatch_count = int((end_timestamps != expected_end).sum())
+        raise ValueError(f"{end_time_col} does not equal {time_col} + {step_hours} hour(s) for {mismatch_count} rows.")
+
+
+def merge_datasets(
+    df_consumption: pd.DataFrame,
+    df_generation: pd.DataFrame,
+    step_hours: int = 1,
+    target_tz: str = "UTC",
+) -> pd.DataFrame:
     """
     Merges consumption and generation DataFrames.
     Args:
@@ -112,7 +150,7 @@ def merge_datasets(df_consumption: pd.DataFrame, df_generation: pd.DataFrame) ->
         how="inner"
     )
     df_merged = df_merged.sort_values("timestamp").reset_index(drop=True)
-    # Skip missing hours validation due to DST (as per notebook)
+    validate_hourly_utc_continuity(df_merged, step_hours=step_hours, target_tz=target_tz)
 
     logging.info("Datasets merged successfully.")
     return df_merged
@@ -133,7 +171,7 @@ def process_data(output_path: str, source_tz: str, target_tz: str, step_hours: i
     df_consumption_clean = clean_consumption(consumption, source_tz, target_tz, step_hours)
     df_generation_clean = clean_generation(generation, source_tz, target_tz, step_hours)
     # Merge
-    df_merged = merge_datasets(df_consumption_clean, df_generation_clean)
+    df_merged = merge_datasets(df_consumption_clean, df_generation_clean, step_hours=step_hours, target_tz=target_tz)
     # Save
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
