@@ -1,8 +1,27 @@
 .venv/
+
+# Data and generated artifacts. Keep these out of public Git; track only
+# DVC pointer/config files or intentionally redacted summaries.
 data/raw/
+data/processed/
+data/validated/
+data/modeling/
+artifacts/models/
+artifacts/predictions/
+artifacts/stages/
+artifacts/figures/
+artifacts/mlflow_notebook/
 mlruns/
 notebooks/mlruns/
-artifacts/mlflow_notebook/
+
+# Common local model/data outputs
+*.parquet
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+*.h5
+*.hdf5
 
 # Python bytecode / cache
 __pycache__/
