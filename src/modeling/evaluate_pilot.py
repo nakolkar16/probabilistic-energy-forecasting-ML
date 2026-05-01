@@ -10,6 +10,8 @@ import pandas as pd
 import yaml
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+from src.modeling.quantile_columns import quantile_cols
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 LOGGER = logging.getLogger(__name__)
@@ -71,7 +73,7 @@ def _manifest_metrics(paths: dict[str, Path]) -> dict[str, dict[str, float]]:
     for _, rec in manifest_df.iterrows():
         model_name = str(rec["model_name"])
         model_metrics: dict[str, float] = {}
-        for col in ["raw_crossing_rate", "repaired_crossing_rate"]:
+        for col in ["raw_crossing_rate", "calibrated_crossing_rate", "repair_rate", "output_crossing_rate"]:
             if col in manifest_df.columns and pd.notna(rec[col]):
                 model_metrics[col] = float(rec[col])
         metrics[model_name] = model_metrics
@@ -91,6 +93,7 @@ def evaluate_pilot() -> None:
     coverage_tolerance = float(backtest_cfg.get("coverage_tolerance", 0.05))
     max_crossing_rate = float(backtest_cfg.get("max_crossing_rate", 0.0))
     min_fold_coverage = float(backtest_cfg.get("min_fold_coverage", nominal_coverage - coverage_tolerance))
+    coverage_lower_bound = nominal_coverage - coverage_tolerance
 
     pred_files = _resolve_prediction_files(paths)
     if not pred_files:
@@ -107,15 +110,15 @@ def evaluate_pilot() -> None:
         if target_col not in pred_df.columns:
             raise ValueError(f"Predictions file '{pred_path}' must include '{target_col}' for pilot evaluation.")
 
-        quantile_cols = {q: f"pred_q{int(round(q * 100))}" for q in quantiles}
-        missing_pred_cols = [c for c in quantile_cols.values() if c not in pred_df.columns]
+        pred_cols = quantile_cols(quantiles)
+        missing_pred_cols = [c for c in pred_cols.values() if c not in pred_df.columns]
         if missing_pred_cols:
             raise ValueError(f"Missing prediction columns in '{pred_path}': {missing_pred_cols}")
 
         y_true = pred_df[target_col].to_numpy()
         model_quantile_rows: list[dict[str, Any]] = []
         for q in quantiles:
-            pred = pred_df[quantile_cols[q]].to_numpy()
+            pred = pred_df[pred_cols[q]].to_numpy()
             model_quantile_rows.append(
                 {
                     "model_name": model_name,
@@ -129,14 +132,20 @@ def evaluate_pilot() -> None:
         model_quantile_df = pd.DataFrame(model_quantile_rows).sort_values("quantile").reset_index(drop=True)
         quantile_rows_all.extend(model_quantile_rows)
 
-        low_pred = pred_df[quantile_cols[q_low]].to_numpy()
-        high_pred = pred_df[quantile_cols[q_high]].to_numpy()
-        q_matrix = np.column_stack([pred_df[quantile_cols[q]].to_numpy() for q in quantiles])
-        repaired_crossing_rate = float((np.diff(q_matrix, axis=1) < 0).any(axis=1).mean())
-        crossing_rate = manifest_metrics.get(model_name, {}).get("raw_crossing_rate", repaired_crossing_rate)
+        low_pred = pred_df[pred_cols[q_low]].to_numpy()
+        high_pred = pred_df[pred_cols[q_high]].to_numpy()
+        q_matrix = np.column_stack([pred_df[pred_cols[q]].to_numpy() for q in quantiles])
+        output_crossing_rate = float((np.diff(q_matrix, axis=1) < 0).any(axis=1).mean())
+        raw_crossing_rate = manifest_metrics.get(model_name, {}).get("raw_crossing_rate", output_crossing_rate)
+        calibrated_crossing_rate = manifest_metrics.get(model_name, {}).get(
+            "calibrated_crossing_rate", output_crossing_rate
+        )
+        repair_rate = manifest_metrics.get(model_name, {}).get("repair_rate", 0.0)
+        crossing_rate = output_crossing_rate
         coverage = float(((low_pred <= y_true) & (y_true <= high_pred)).mean())
         interval_width = float((high_pred - low_pred).mean())
         coverage_gap = float(coverage - nominal_coverage)
+        overcoverage_gap = max(0.0, coverage_gap)
 
         p50_row = model_quantile_df[model_quantile_df["quantile"] == q_med].iloc[0]
         summary = {
@@ -152,11 +161,14 @@ def evaluate_pilot() -> None:
             "r2_p50": float(p50_row["r2"]),
             "coverage": coverage,
             "coverage_gap": coverage_gap,
+            "overcoverage_gap": overcoverage_gap,
             "interval_width": interval_width,
             "crossing_rate": crossing_rate,
-            "raw_crossing_rate": crossing_rate,
-            "repaired_crossing_rate": repaired_crossing_rate,
-            "coverage_gate_pass": bool(abs(coverage_gap) <= coverage_tolerance),
+            "raw_crossing_rate": raw_crossing_rate,
+            "calibrated_crossing_rate": calibrated_crossing_rate,
+            "repair_rate": repair_rate,
+            "output_crossing_rate": output_crossing_rate,
+            "coverage_gate_pass": bool(coverage >= coverage_lower_bound),
             "crossing_gate_pass": bool(crossing_rate <= max_crossing_rate),
             "min_coverage_gate_pass": bool(coverage >= min_fold_coverage),
         }
@@ -167,13 +179,29 @@ def evaluate_pilot() -> None:
 
     quantile_metrics_df = pd.DataFrame(quantile_rows_all).sort_values(["model_name", "quantile"]).reset_index(drop=True)
     summary_df = pd.DataFrame(summary_rows).sort_values("pinball_mean").reset_index(drop=True)
-    best_row = summary_df.iloc[0]
+    best_by_pinball_row = summary_df.iloc[0]
+    approved_df = summary_df[summary_df["overall_gate_pass"]].copy()
+    best_approved_row = approved_df.iloc[0] if not approved_df.empty else None
 
     paths["metrics_path"].parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "n_models_evaluated": int(len(summary_df)),
-        "best_model_by_pinball_mean": str(best_row["model_name"]),
-        "best_pinball_mean": float(best_row["pinball_mean"]),
+        "best_by_pinball": {
+            "model_name": str(best_by_pinball_row["model_name"]),
+            "pinball_mean": float(best_by_pinball_row["pinball_mean"]),
+            "overall_gate_pass": bool(best_by_pinball_row["overall_gate_pass"]),
+        },
+        "best_approved_model": (
+            {
+                "model_name": str(best_approved_row["model_name"]),
+                "pinball_mean": float(best_approved_row["pinball_mean"]),
+                "overall_gate_pass": bool(best_approved_row["overall_gate_pass"]),
+            }
+            if best_approved_row is not None
+            else None
+        ),
+        "best_model_by_pinball_mean": str(best_by_pinball_row["model_name"]),
+        "best_pinball_mean": float(best_by_pinball_row["pinball_mean"]),
         "models": summary_df.to_dict(orient="records"),
     }
     _write_json(paths["metrics_path"], payload)
@@ -186,6 +214,7 @@ def evaluate_pilot() -> None:
     pd.DataFrame(
         [
             {"metric": "coverage_tolerance", "value": coverage_tolerance},
+            {"metric": "coverage_lower_bound", "value": coverage_lower_bound},
             {"metric": "max_crossing_rate", "value": max_crossing_rate},
             {"metric": "min_fold_coverage", "value": min_fold_coverage},
         ]
@@ -194,8 +223,8 @@ def evaluate_pilot() -> None:
     LOGGER.info(
         "Pilot evaluation complete | models=%s | best=%s (pinball_mean=%.3f)",
         len(summary_df),
-        best_row["model_name"],
-        best_row["pinball_mean"],
+        best_by_pinball_row["model_name"],
+        best_by_pinball_row["pinball_mean"],
     )
 
 

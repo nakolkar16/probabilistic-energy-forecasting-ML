@@ -1,49 +1,215 @@
 {
-  "locked_baseline": {
-    "name": "quantile_lag24_lag168_hour_dow_gen",
+  "workflow": "simplified_fixed_baseline_top2_lgbm",
+  "fixed_baseline": {
+    "name": "baseline_quantile_cyclic",
     "alpha": 0.001,
     "ref": {
-      "pinball_mean": 2397.043350824493,
-      "coverage": 0.7945323741007194,
-      "coverage_gap": -0.005467625899280626,
+      "pinball_mean": 2528.268237811941,
+      "coverage": 0.7922115664051148,
+      "coverage_gap": -0.007788433594885236,
       "crossing_rate": 0.0,
-      "r2_p50": 0.5288622652884648,
-      "coverage_min": 0.7355395683453237
+      "r2_p50": 0.4994757972643901,
+      "coverage_min": 0.7460040685847138
     }
   },
-  "lgbm_winner_candidate": "lgbm_lag_time_gen",
-  "lgbm_tuned_params": {
-    "learning_rate": 0.09307352594320838,
-    "n_estimators": 296,
-    "num_leaves": 16,
-    "min_child_samples": 77,
-    "subsample": 0.7117402442626439,
-    "colsample_bytree": 0.8705209436879033,
-    "reg_alpha": 1.3113568940667688,
-    "reg_lambda": 3.360048596251981
+  "lgbm_feature_race": {
+    "top_candidates": [
+      "lgbm_lag_calendar_rolling_gen",
+      "lgbm_lag_calendar_rolling"
+    ],
+    "winner_candidate": "lgbm_lag_calendar_rolling_gen",
+    "winner_score": 515.0922534838437,
+    "winner_pinball_mean": 515.0922534838437,
+    "winner_gate_pass": true,
+    "race_source_rows": 13766,
+    "race_splits": 5,
+    "race_params": {
+      "learning_rate": 0.05,
+      "n_estimators": 200,
+      "num_leaves": 31,
+      "min_child_samples": 20,
+      "subsample": 0.9,
+      "colsample_bytree": 0.9,
+      "reg_alpha": 0.0,
+      "reg_lambda": 0.0,
+      "random_state": 42,
+      "n_jobs": -1,
+      "verbosity": -1
+    }
   },
-  "test_check": {
-    "baseline_pinball_mean": 2539.109261316253,
-    "winner_pinball_mean": 2659.710657698474
+  "lgbm_tuned_candidates": [
+    {
+      "rank": 1,
+      "model_name": "challenger_1",
+      "candidate": "lgbm_lag_calendar_rolling_gen",
+      "feature_cols": [
+        "lag_1",
+        "lag_2",
+        "lag_3",
+        "lag_6",
+        "lag_12",
+        "lag_24",
+        "lag_48",
+        "lag_72",
+        "lag_168",
+        "lag_336",
+        "hour",
+        "day_of_week",
+        "month",
+        "is_weekend",
+        "season_bucket",
+        "hour_sin",
+        "hour_cos",
+        "dow_sin",
+        "dow_cos",
+        "month_sin",
+        "month_cos",
+        "rolling_mean_3",
+        "rolling_mean_6",
+        "rolling_mean_12",
+        "rolling_mean_24",
+        "rolling_mean_168",
+        "rolling_std_6",
+        "rolling_std_24",
+        "rolling_std_168",
+        "rolling_min_24",
+        "rolling_max_24",
+        "diff_1",
+        "diff_3",
+        "diff_24",
+        "diff_168",
+        "lignite_mwh_lag_1",
+        "lignite_mwh_lag_24",
+        "lignite_mwh_lag_168",
+        "fossil_gas_mwh_lag_1",
+        "fossil_gas_mwh_lag_24",
+        "fossil_gas_mwh_lag_168",
+        "hard_coal_mwh_lag_1",
+        "hard_coal_mwh_lag_24",
+        "hard_coal_mwh_lag_168",
+        "photovoltaics_mwh_lag_1",
+        "photovoltaics_mwh_lag_24",
+        "photovoltaics_mwh_lag_168",
+        "wind_onshore_mwh_lag_1",
+        "wind_onshore_mwh_lag_24",
+        "wind_onshore_mwh_lag_168",
+        "gen_hydro_pumped_storage_mwh_lag_1",
+        "gen_hydro_pumped_storage_mwh_lag_24",
+        "gen_hydro_pumped_storage_mwh_lag_168"
+      ],
+      "params": {
+        "learning_rate": 0.05684512803184128,
+        "n_estimators": 316,
+        "num_leaves": 120,
+        "min_child_samples": 35,
+        "subsample": 0.8170504100262773,
+        "colsample_bytree": 0.9451768276740136,
+        "reg_alpha": 1.9634821801877629,
+        "reg_lambda": 2.8129870929302907
+      },
+      "stage_metrics": {
+        "candidate": "lgbm_lag_calendar_rolling_gen",
+        "trials_completed": 34,
+        "best_score": 503.64602657125,
+        "best_pinball_mean": 503.64602657125,
+        "best_gate_pass": true,
+        "selected_trial": 39,
+        "selected_trial_gate_pass": true,
+        "tune_rows": 13766
+      }
+    },
+    {
+      "rank": 2,
+      "model_name": "challenger_2",
+      "candidate": "lgbm_lag_calendar_rolling",
+      "feature_cols": [
+        "lag_1",
+        "lag_2",
+        "lag_3",
+        "lag_6",
+        "lag_12",
+        "lag_24",
+        "lag_48",
+        "lag_72",
+        "lag_168",
+        "lag_336",
+        "hour",
+        "day_of_week",
+        "month",
+        "is_weekend",
+        "season_bucket",
+        "hour_sin",
+        "hour_cos",
+        "dow_sin",
+        "dow_cos",
+        "month_sin",
+        "month_cos",
+        "rolling_mean_3",
+        "rolling_mean_6",
+        "rolling_mean_12",
+        "rolling_mean_24",
+        "rolling_mean_168",
+        "rolling_std_6",
+        "rolling_std_24",
+        "rolling_std_168",
+        "rolling_min_24",
+        "rolling_max_24",
+        "diff_1",
+        "diff_3",
+        "diff_24",
+        "diff_168"
+      ],
+      "params": {
+        "learning_rate": 0.07334408182080049,
+        "n_estimators": 342,
+        "num_leaves": 76,
+        "min_child_samples": 22,
+        "subsample": 0.7502097976227741,
+        "colsample_bytree": 0.7790681865924416,
+        "reg_alpha": 0.35768477005992627,
+        "reg_lambda": 3.658933329788361
+      },
+      "stage_metrics": {
+        "candidate": "lgbm_lag_calendar_rolling",
+        "trials_completed": 31,
+        "best_score": 513.6147401952109,
+        "best_pinball_mean": 510.7584741382445,
+        "best_gate_pass": false,
+        "selected_trial": 32,
+        "selected_trial_gate_pass": false,
+        "tune_rows": 13766
+      }
+    }
+  ],
+  "test_report": {
+    "baseline_pinball_mean": 2700.9538700125026,
+    "challenger_pinball_mean": {
+      "challenger_1": 303.3954844886785,
+      "challenger_2": 317.9049670015039
+    },
+    "champion_pinball_mean": 303.3954844886785,
+    "test_used_for_selection": false
   },
-  "final_decision": {
-    "champion_family": "quantile_regression",
-    "promote_challenger": false,
-    "improvement_pct_vs_baseline": -0.03362786746939833,
-    "significance_pvalue": 0.15547531026995434
+  "model_selection": {
+    "champion_family": "lightgbm_quantile",
+    "approval_status": "approved_champion",
+    "promote_challenger": true,
+    "selected_model_name": "challenger_1",
+    "selected_candidate": "lgbm_lag_calendar_rolling_gen",
+    "decision_reason": "challenger_1 promoted: tuned lgbm_lag_calendar_rolling_gen passed gates and beat baseline."
   },
   "point_vs_p50": {
     "point_metrics": {
-      "pinball_q50": 4274.937542421492,
-      "mae": 8549.875084842985,
-      "rmse": 10528.421711769592,
-      "r2": 0.44957360058027074
+      "pinball_q50": 4335.640844983152,
+      "mae": 8671.281689966305,
+      "rmse": 10744.140071098971,
+      "r2": 0.42779258841527046
     },
     "champion_p50_metrics": {
-      "pinball_q50": 4149.436109390785,
-      "mae": 8298.87221878157,
-      "rmse": 10307.118217339139,
-      "r2": 0.47246992351271155
+      "pinball_q50": 442.04374785196165,
+      "mae": 884.0874957039233,
+      "rmse": 1154.2844786295125,
+      "r2": 0.9933955620038197
     }
   }
 }

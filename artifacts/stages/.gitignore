@@ -8,3 +8,8 @@
 /07_predict
 /08_evaluate_pilot
 /09_plot_predictions
+/04_model_selection
+/05_test_report
+/01_baseline_calibration
+/02_lgbm_feature_race
+/03_lgbm_top2_tuning

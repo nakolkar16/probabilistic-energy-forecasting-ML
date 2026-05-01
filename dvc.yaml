@@ -61,12 +61,13 @@ stages:
       - model_training.target_col
       - model_training.time_col
       - model_training.lags_hours
+      - model_training.rolling_windows
+      - model_training.rolling_std_windows
       - model_training.generation_features
       - model_training.generation_lag_hours
       - model_training.quantiles
       - model_training.split.train_fraction
-      - model_training.benchmark.locked_baseline
-      - model_training.benchmark.tune.candidates
+      - model_training.benchmark.baseline
       - model_training.lightgbm_tuning.candidates
     outs:
       - data/modeling/model_ready.parquet
@@ -92,6 +93,8 @@ stages:
       - model_training.backtest.coverage_tolerance
       - model_training.backtest.max_crossing_rate
       - model_training.backtest.min_fold_coverage
+      - model_training.approval.baseline_min_coverage
+      - model_training.approval.baseline_max_crossing_rate
       - model_training.benchmark.tune.enabled
       - model_training.benchmark.tune.alpha_grid
       - model_training.benchmark.tune.cv_splits
@@ -102,11 +105,11 @@ stages:
       - model_training.point_models.linear_regression.fit_intercept
       - model_training.mlflow
     outs:
-      - artifacts/stages/01_baseline_screen_tune
-      - artifacts/stages/02_lgbm_feature_screen
-      - artifacts/stages/03_lgbm_tuning
-      - artifacts/stages/04_test_check
-      - artifacts/stages/05_final_decision
+      - artifacts/stages/01_baseline_calibration
+      - artifacts/stages/02_lgbm_feature_race
+      - artifacts/stages/03_lgbm_top2_tuning
+      - artifacts/stages/04_model_selection
+      - artifacts/stages/05_test_report
       - artifacts/stages/06_point_vs_p50_check
       - artifacts/models
     metrics:
