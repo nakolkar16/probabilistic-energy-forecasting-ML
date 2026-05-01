@@ -12,6 +12,7 @@ artifacts/stages/
 artifacts/figures/
 artifacts/mlflow_notebook/
 mlruns/
+notebooks/
 notebooks/mlruns/
 
 # Common local model/data outputs
