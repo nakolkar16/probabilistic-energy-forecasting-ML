@@ -11,6 +11,10 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from src.modeling.model_artifacts import trusted_model_path
+from src.modeling.quantile_columns import quantile_col
+from src.modeling.quantile_repair import quantile_crossing_rate, repair_quantile_order
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 LOGGER = logging.getLogger(__name__)
@@ -54,24 +58,14 @@ def _resolve_model(model_map: dict[Any, Any], q: float) -> Any:
     raise KeyError(f"No model found for quantile={q}")
 
 
-def _enforce_quantile_order(pred_map: dict[float, np.ndarray], quantiles: list[float]) -> dict[float, np.ndarray]:
-    ordered = np.sort(np.column_stack([pred_map[q] for q in quantiles]), axis=1)
-    return {q: ordered[:, i] for i, q in enumerate(quantiles)}
-
-
-def _quantile_crossing_rate(pred_map: dict[float, np.ndarray], quantiles: list[float]) -> float:
-    q_matrix = np.column_stack([pred_map[q] for q in quantiles])
-    return float((np.diff(q_matrix, axis=1) < 0).any(axis=1).mean())
-
-
 def _resolve_model_paths(cfg: dict[str, Any]) -> dict[str, Path]:
     infer_cfg = cfg.get("inference", {})
     model_paths_cfg = infer_cfg.get("model_paths", {})
     if isinstance(model_paths_cfg, dict) and model_paths_cfg:
-        return {str(name): Path(path) for name, path in model_paths_cfg.items()}
+        return {str(name): trusted_model_path(path) for name, path in model_paths_cfg.items()}
 
     fallback_model = infer_cfg.get("model_path", "artifacts/models/champion.joblib")
-    return {"champion": Path(fallback_model)}
+    return {"champion": trusted_model_path(fallback_model)}
 
 
 def predict() -> None:
@@ -81,12 +75,12 @@ def predict() -> None:
     target_col = str(cfg["target_col"])
     time_col = str(cfg["time_col"])
     primary_model = str(cfg.get("inference", {}).get("primary_model", "champion"))
+    expected_quantiles = sorted(float(q) for q in cfg["quantiles"])
     model_paths = _resolve_model_paths(cfg)
-
-    with open(paths["metadata_path"], "r", encoding="utf-8") as f:
-        metadata = json.load(f)
-    target_lower = float(metadata.get("target_lower_bound", -np.inf))
-    target_upper = float(metadata.get("target_upper_bound", np.inf))
+    if primary_model not in model_paths:
+        raise ValueError(
+            f"Configured primary_model '{primary_model}' is not present in model_paths: {list(model_paths)}"
+        )
 
     df = pd.read_parquet(paths["input_path"]).copy()
     paths["output_dir"].mkdir(parents=True, exist_ok=True)
@@ -105,6 +99,10 @@ def predict() -> None:
             raise ValueError(f"Missing required features for model '{model_name}': {missing}")
 
         quantiles = sorted(float(q) for q in bundle["quantiles"])
+        if quantiles != expected_quantiles:
+            raise ValueError(
+                f"Model '{model_name}' quantiles {quantiles} do not match params.yaml quantiles {expected_quantiles}."
+            )
         q_low, q_high = quantiles[0], quantiles[-1]
         qhat = float(bundle.get("qhat", 0.0))
 
@@ -114,13 +112,12 @@ def predict() -> None:
             model = _resolve_model(bundle["models"], q)
             pred_map[q] = np.asarray(model.predict(X), dtype=float)
 
-        raw_crossing_rate = _quantile_crossing_rate(pred_map, quantiles)
-        pred_map = _enforce_quantile_order(pred_map, quantiles)
+        raw_crossing_rate = quantile_crossing_rate(pred_map, quantiles)
         pred_map[q_low] = pred_map[q_low] - qhat
         pred_map[q_high] = pred_map[q_high] + qhat
-        pred_map = _enforce_quantile_order(pred_map, quantiles)
-        pred_map = {q: np.clip(pred, target_lower, target_upper) for q, pred in pred_map.items()}
-        repaired_crossing_rate = _quantile_crossing_rate(pred_map, quantiles)
+        calibrated_crossing_rate = quantile_crossing_rate(pred_map, quantiles)
+        pred_map, repair_rate = repair_quantile_order(pred_map, quantiles)
+        output_crossing_rate = quantile_crossing_rate(pred_map, quantiles)
 
         out_df = pd.DataFrame(index=df.index)
         if time_col in df.columns:
@@ -129,8 +126,7 @@ def predict() -> None:
             out_df[target_col] = df[target_col]
 
         for q in quantiles:
-            q_label = int(round(q * 100))
-            col_name = f"pred_q{q_label}"
+            col_name = quantile_col(q)
             out_df[col_name] = pred_map[q]
             quantile_cols_all.append({"model_name": model_name, "quantile": q, "col": col_name})
 
@@ -153,7 +149,9 @@ def predict() -> None:
                 "quantiles": ",".join(str(q) for q in quantiles),
                 "qhat": qhat,
                 "raw_crossing_rate": raw_crossing_rate,
-                "repaired_crossing_rate": repaired_crossing_rate,
+                "calibrated_crossing_rate": calibrated_crossing_rate,
+                "repair_rate": repair_rate,
+                "output_crossing_rate": output_crossing_rate,
                 "rows_scored": int(len(out_df)),
             }
         )
@@ -164,11 +162,11 @@ def predict() -> None:
     paths["manifest_path"].parent.mkdir(parents=True, exist_ok=True)
     manifest_df.to_csv(paths["manifest_path"], index=False)
 
-    if champion_output is None and manifest_rows:
-        champion_output = Path(manifest_rows[0]["prediction_path"])
-    if champion_output is not None:
-        paths["legacy_output_path"].parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(champion_output, paths["legacy_output_path"])
+    if champion_output is None:
+        raise RuntimeError(f"Primary model '{primary_model}' was not scored; cannot write legacy champion output.")
+
+    paths["legacy_output_path"].parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(champion_output, paths["legacy_output_path"])
 
     summary = {
         "rows_scored": int(len(df)),

@@ -11,6 +11,8 @@ import pandas as pd
 import seaborn as sns
 import yaml
 
+from src.modeling.quantile_columns import low_median_high_quantiles, quantile_cols
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 LOGGER = logging.getLogger(__name__)
@@ -92,6 +94,15 @@ def plot_predictions() -> None:
     cfg = params["model_training"]
     target_col = str(cfg["target_col"])
     time_col = str(cfg["time_col"])
+    quantiles = sorted(float(q) for q in cfg["quantiles"])
+    q_low, q_med, q_high = low_median_high_quantiles(quantiles)
+    pred_cols = quantile_cols(quantiles)
+    q_low_col = pred_cols[q_low]
+    q_med_col = pred_cols[q_med]
+    q_high_col = pred_cols[q_high]
+    q_low_label = int(round(q_low * 100))
+    q_med_label = int(round(q_med * 100))
+    q_high_label = int(round(q_high * 100))
     inference_cfg = cfg.get("inference", {})
     plot_timezone = str(inference_cfg.get("plot_timezone", "Europe/Berlin"))
     plot_dates_cfg = inference_cfg.get("plot_dates", [])
@@ -104,7 +115,7 @@ def plot_predictions() -> None:
 
     # Use first model to resolve plot dates; all model predictions come from same scoring batch.
     base_df = pd.read_parquet(pred_files[0][1]).copy()
-    required_cols = [time_col, "pred_q10", "pred_q50", "pred_q90"]
+    required_cols = [time_col, q_low_col, q_med_col, q_high_col]
     missing = [c for c in required_cols if c not in base_df.columns]
     if missing:
         raise ValueError(f"Missing required columns in predictions file: {missing}")
@@ -128,7 +139,7 @@ def plot_predictions() -> None:
         if not pred_path.exists():
             continue
         df = pd.read_parquet(pred_path).copy()
-        required_cols = [time_col, "pred_q10", "pred_q50", "pred_q90"]
+        required_cols = [time_col, q_low_col, q_med_col, q_high_col]
         missing = [c for c in required_cols if c not in df.columns]
         if missing:
             raise ValueError(f"Missing required columns in '{pred_path}': {missing}")
@@ -158,17 +169,17 @@ def plot_predictions() -> None:
                 )
             ax.plot(
                 day_df[local_time_col],
-                day_df["pred_q50"],
-                label="Predicted p50",
+                day_df[q_med_col],
+                label=f"Predicted p{q_med_label}",
                 linewidth=2.4,
                 color="#1F78B4",
             )
             ax.fill_between(
                 day_df[local_time_col],
-                day_df["pred_q10"],
-                day_df["pred_q90"],
+                day_df[q_low_col],
+                day_df[q_high_col],
                 alpha=0.18,
-                label="Prediction band (p10-p90)",
+                label=f"Prediction band (p{q_low_label}-p{q_high_label})",
                 color="#4EA3D8",
             )
 

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -43,53 +44,22 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _build_feature_map(
     work_df: pd.DataFrame,
+    lag_features: list[str],
+    calendar_features: list[str],
+    rolling_features: list[str],
+    diff_features: list[str],
     generation_lagged_features: list[str],
 ) -> dict[str, list[str]]:
-    gen_core_tokens = ("photovoltaics", "wind_onshore", "lignite", "fossil_gas", "hard_coal")
-    gen_core = sorted([c for c in generation_lagged_features if any(tok in c for tok in gen_core_tokens)])
+    baseline_features = ["lag_24", "lag_168", "hour_sin", "hour_cos", "dow_sin", "dow_cos"]
+    lag_calendar = lag_features + calendar_features
+    lag_calendar_rolling = lag_calendar + rolling_features + diff_features
 
     feature_map: dict[str, list[str]] = {
-        "quantile_lag24_lag168": ["lag_24", "lag_168"],
-        "quantile_lag24_lag168_hour_dow": ["lag_24", "lag_168", "day_of_week", "hour"],
-        "quantile_lag24_lag168_hour_dow_weekend": [
-            "lag_24",
-            "lag_168",
-            "day_of_week",
-            "hour",
-            "is_weekend",
-        ],
-        "quantile_lag24_lag168_hour_dow_gen": ["lag_24", "lag_168", "day_of_week", "hour"] + generation_lagged_features,
-        "quantile_lag24_lag168_hour_dow_weekend_gen": [
-            "lag_24",
-            "lag_168",
-            "day_of_week",
-            "hour",
-            "is_weekend",
-        ]
-        + generation_lagged_features,
-        "quantile_lag24_lag168_hour_dow_weekend_season": [
-            "lag_24",
-            "lag_168",
-            "day_of_week",
-            "hour",
-            "is_weekend",
-            "season_bucket",
-        ],
-        "quantile_lag24_lag168_hour_dow_weekend_season_gen": [
-            "lag_24",
-            "lag_168",
-            "day_of_week",
-            "hour",
-            "is_weekend",
-            "season_bucket",
-        ]
-        + generation_lagged_features,
-        "lgbm_lag_only": ["lag_24", "lag_168"],
-        "lgbm_lag_time": ["lag_24", "lag_168", "day_of_week", "hour"],
-        "lgbm_lag_time_weekend": ["lag_24", "lag_168", "day_of_week", "hour", "is_weekend"],
-        "lgbm_lag_time_season": ["lag_24", "lag_168", "day_of_week", "hour", "season_bucket"],
-        "lgbm_lag_time_gen_core": ["lag_24", "lag_168", "day_of_week", "hour"] + gen_core,
-        "lgbm_lag_time_gen": ["lag_24", "lag_168", "day_of_week", "hour"] + generation_lagged_features,
+        "baseline_quantile_cyclic": baseline_features,
+        "lgbm_lag_core": lag_features,
+        "lgbm_lag_calendar": lag_calendar,
+        "lgbm_lag_calendar_rolling": lag_calendar_rolling,
+        "lgbm_lag_calendar_rolling_gen": lag_calendar_rolling + generation_lagged_features,
     }
 
     out: dict[str, list[str]] = {}
@@ -102,31 +72,11 @@ def _build_feature_map(
 def _resolve_candidates(
     cfg: dict[str, Any],
     feature_map: dict[str, list[str]],
-) -> tuple[list[str], list[str]]:
+) -> tuple[str, list[str]]:
     benchmark_cfg = cfg.get("benchmark", {})
-    baseline_cfg = benchmark_cfg.get("tune", {})
-    baseline_candidates_cfg = list(baseline_cfg.get("candidates", []))
-
-    if baseline_candidates_cfg:
-        baseline_candidates = [c for c in baseline_candidates_cfg if c in feature_map]
-    else:
-        baseline_candidates = [
-            c
-            for c in [
-                "quantile_lag24_lag168",
-                "quantile_lag24_lag168_hour_dow",
-                "quantile_lag24_lag168_hour_dow_weekend",
-                "quantile_lag24_lag168_hour_dow_gen",
-                "quantile_lag24_lag168_hour_dow_weekend_gen",
-                "quantile_lag24_lag168_hour_dow_weekend_season",
-                "quantile_lag24_lag168_hour_dow_weekend_season_gen",
-            ]
-            if c in feature_map
-        ]
-
-    locked_baseline = str(benchmark_cfg.get("locked_baseline", "quantile_lag24_lag168_hour_dow"))
-    if locked_baseline in feature_map and locked_baseline not in baseline_candidates:
-        baseline_candidates.append(locked_baseline)
+    baseline_name = str(benchmark_cfg.get("baseline", "baseline_quantile_cyclic"))
+    if baseline_name not in feature_map:
+        raise ValueError(f"Configured baseline '{baseline_name}' is not in feature_map.")
 
     lgbm_cfg = cfg.get("lightgbm_tuning", {})
     lgbm_candidates_cfg = list(lgbm_cfg.get("candidates", []))
@@ -136,17 +86,18 @@ def _resolve_candidates(
         lgbm_candidates = [
             c
             for c in [
-                "lgbm_lag_only",
-                "lgbm_lag_time",
-                "lgbm_lag_time_weekend",
-                "lgbm_lag_time_season",
-                "lgbm_lag_time_gen_core",
-                "lgbm_lag_time_gen",
+                "lgbm_lag_core",
+                "lgbm_lag_calendar",
+                "lgbm_lag_calendar_rolling",
+                "lgbm_lag_calendar_rolling_gen",
             ]
             if c in feature_map
         ]
 
-    return baseline_candidates, lgbm_candidates
+    if not lgbm_candidates:
+        raise ValueError("No valid LGBM candidates found in feature_map.")
+
+    return baseline_name, lgbm_candidates
 
 
 def build_model_dataset() -> None:
@@ -160,9 +111,11 @@ def build_model_dataset() -> None:
     input_path = Path(cfg["input_path"])
     time_col = str(cfg["time_col"])
     target_col = str(cfg["target_col"])
-    lags_hours = [int(v) for v in cfg["lags_hours"]]
+    lags_hours = sorted({int(v) for v in cfg["lags_hours"]})
     generation_features = list(cfg.get("generation_features", []))
-    generation_lag_hours = [int(v) for v in cfg.get("generation_lag_hours", lags_hours)]
+    generation_lag_hours = sorted({int(v) for v in cfg.get("generation_lag_hours", [1, 24, 168])})
+    rolling_windows = sorted({int(v) for v in cfg.get("rolling_windows", [3, 6, 12, 24, 168])})
+    rolling_std_windows = sorted({int(v) for v in cfg.get("rolling_std_windows", [6, 24, 168])})
     train_fraction = float(cfg["split"]["train_fraction"])
 
     logging.info("Reading validated data from %s", input_path)
@@ -178,6 +131,41 @@ def build_model_dataset() -> None:
     work_df["month"] = work_df[time_col].dt.month.astype(int)
     season_map = {12: 0, 1: 0, 2: 0, 3: 1, 4: 1, 5: 1, 6: 2, 7: 2, 8: 2, 9: 3, 10: 3, 11: 3}
     work_df["season_bucket"] = work_df["month"].map(season_map).astype(int)
+    work_df["hour_sin"] = np.sin(2 * np.pi * work_df["hour"] / 24)
+    work_df["hour_cos"] = np.cos(2 * np.pi * work_df["hour"] / 24)
+    work_df["dow_sin"] = np.sin(2 * np.pi * work_df["day_of_week"] / 7)
+    work_df["dow_cos"] = np.cos(2 * np.pi * work_df["day_of_week"] / 7)
+    work_df["month_sin"] = np.sin(2 * np.pi * (work_df["month"] - 1) / 12)
+    work_df["month_cos"] = np.cos(2 * np.pi * (work_df["month"] - 1) / 12)
+
+    shifted_target = work_df[target_col].shift(1)
+    rolling_features: list[str] = []
+    for window in rolling_windows:
+        col = f"rolling_mean_{window}"
+        work_df[col] = shifted_target.rolling(window=window, min_periods=window).mean()
+        rolling_features.append(col)
+
+    for window in rolling_std_windows:
+        col = f"rolling_std_{window}"
+        work_df[col] = shifted_target.rolling(window=window, min_periods=window).std()
+        rolling_features.append(col)
+
+    for stat in ["min", "max"]:
+        col = f"rolling_{stat}_24"
+        work_df[col] = getattr(shifted_target.rolling(window=24, min_periods=24), stat)()
+        rolling_features.append(col)
+
+    diff_specs = {
+        "diff_1": ("lag_1", "lag_2"),
+        "diff_3": ("lag_1", "lag_3"),
+        "diff_24": ("lag_24", "lag_48"),
+        "diff_168": ("lag_24", "lag_168"),
+    }
+    diff_features: list[str] = []
+    for col, (left, right) in diff_specs.items():
+        if left in work_df.columns and right in work_df.columns:
+            work_df[col] = work_df[left] - work_df[right]
+            diff_features.append(col)
 
     generation_base_features = [c for c in generation_features if c in work_df.columns and not work_df[c].isna().all()]
     generation_lagged_features: list[str] = []
@@ -187,15 +175,36 @@ def build_model_dataset() -> None:
             work_df[lag_col] = work_df[base_col].shift(lag_h)
             generation_lagged_features.append(lag_col)
 
-    required_cols = [f"lag_{h}" for h in lags_hours] + generation_lagged_features
+    lag_features = [f"lag_{h}" for h in lags_hours]
+    calendar_features = [
+        "hour",
+        "day_of_week",
+        "month",
+        "is_weekend",
+        "season_bucket",
+        "hour_sin",
+        "hour_cos",
+        "dow_sin",
+        "dow_cos",
+        "month_sin",
+        "month_cos",
+    ]
+    required_cols = lag_features + rolling_features + diff_features + generation_lagged_features
     work_df = work_df.dropna(subset=required_cols).copy()
 
     split_idx = int(len(work_df) * train_fraction)
     train_df = work_df.iloc[:split_idx].copy()
     test_df = work_df.iloc[split_idx:].copy()
 
-    feature_map = _build_feature_map(work_df, generation_lagged_features)
-    baseline_candidates, lgbm_candidates = _resolve_candidates(cfg, feature_map)
+    feature_map = _build_feature_map(
+        work_df=work_df,
+        lag_features=lag_features,
+        calendar_features=calendar_features,
+        rolling_features=rolling_features,
+        diff_features=diff_features,
+        generation_lagged_features=generation_lagged_features,
+    )
+    baseline_name, lgbm_candidates = _resolve_candidates(cfg, feature_map)
 
     quantiles = sorted(float(q) for q in cfg["quantiles"])
     metadata = {
@@ -209,9 +218,14 @@ def build_model_dataset() -> None:
         "rows_total": int(len(work_df)),
         "rows_train": int(len(train_df)),
         "rows_test": int(len(test_df)),
+        "lag_features": lag_features,
+        "calendar_features": calendar_features,
+        "rolling_features": rolling_features,
+        "diff_features": diff_features,
         "generation_lagged_feature_count": int(len(generation_lagged_features)),
+        "generation_lagged_features": generation_lagged_features,
         "feature_map": feature_map,
-        "baseline_candidates": baseline_candidates,
+        "baseline_name": baseline_name,
         "lgbm_candidates": lgbm_candidates,
     }
 
@@ -240,4 +254,3 @@ def build_model_dataset() -> None:
 
 if __name__ == "__main__":
     build_model_dataset()
-

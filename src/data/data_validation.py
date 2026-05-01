@@ -43,8 +43,8 @@ def _get_or_create_validator(context: Any, batch_request: Any, suite_name: str):
         )
 
 
-def run_validation(input_path: str, output_path: str, metrics_path: str) -> bool:
-    """Run GX validation and write metrics. Returns True if all passed."""
+def run_validation(input_path: str, output_path: str, metrics_path: str) -> tuple[bool, Any]:
+    """Run GX validation and write metrics. Returns success flag and the GX context used."""
 
     # Load data
     df = pd.read_parquet(input_path)
@@ -146,21 +146,20 @@ def run_validation(input_path: str, output_path: str, metrics_path: str) -> bool
                 print(f"  FAILED: {r.expectation_config.expectation_type} "
                       f"on '{r.expectation_config.kwargs.get('column', 'table')}'")
 
-    return overall_success
+    return overall_success, context
 
 
 if __name__ == "__main__":
     params = load_params()
     v = params["validation"]
 
-    success = run_validation(
+    success, context = run_validation(
         input_path=v["input_path"],
         output_path=v["output_path"],
         metrics_path=v["metrics_path"],
     )
 
     if v.get("build_data_docs", True):
-        context = gx.get_context()
         if hasattr(context, "build_data_docs"):
             context.build_data_docs()
 

@@ -10,8 +10,8 @@ stages:
       nfiles: 2
     - path: src/data/data_processing.py
       hash: md5
-      md5: 5fc2b5d18cf9c2308bd62184dd0a9565
-      size: 5415
+      md5: 5cf847cc8943f572d2b4fc67246bfb60
+      size: 7184
     - path: src/data/load_data.py
       hash: md5
       md5: 0d0b473a1646ffb88de7ad3aa5208be8
@@ -36,8 +36,8 @@ stages:
       size: 1739126
     - path: src/data/data_validation.py
       hash: md5
-      md5: 7443e4a2f0a0ddc1b07cb16ddf159a80
-      size: 6095
+      md5: 4dd4d51dc1d2f6eeead418cdafb76b3c
+      size: 6108
     params:
       params.yaml:
         validation.build_data_docs: true
@@ -47,7 +47,7 @@ stages:
     outs:
     - path: artifacts/metrics/data_quality_metrics.json
       hash: md5
-      md5: 11659a1bef77486c9e662b9e005b9ab4
+      md5: c1c4e28e8a522d6f47bbe929b602d256
       size: 172
     - path: data/validated/validated_data.parquet
       hash: md5
@@ -106,8 +106,8 @@ stages:
       size: 1739126
     - path: src/modeling/build_model_dataset.py
       hash: md5
-      md5: 8c9b41207018a7aba9caf307962c3fd7
-      size: 9209
+      md5: eeaaffb0de6f81f226fa737302b97743
+      size: 9761
     - path: src/utils/reproducibility.py
       hash: md5
       md5: 9a3f8059fa4a691d462639ef5070d80f
@@ -115,15 +115,7 @@ stages:
     params:
       params.yaml:
         global.seed: 42
-        model_training.benchmark.locked_baseline: quantile_lag24_lag168_hour_dow
-        model_training.benchmark.tune.candidates:
-        - quantile_lag24_lag168
-        - quantile_lag24_lag168_hour_dow
-        - quantile_lag24_lag168_hour_dow_weekend
-        - quantile_lag24_lag168_hour_dow_gen
-        - quantile_lag24_lag168_hour_dow_weekend_gen
-        - quantile_lag24_lag168_hour_dow_weekend_season
-        - quantile_lag24_lag168_hour_dow_weekend_season_gen
+        model_training.benchmark.baseline: baseline_quantile_cyclic
         model_training.generation_features:
         - lignite_mwh
         - fossil_gas_mwh
@@ -132,67 +124,84 @@ stages:
         - wind_onshore_mwh
         - gen_hydro_pumped_storage_mwh
         model_training.generation_lag_hours:
+        - 1
         - 24
         - 168
         model_training.input_path: data/validated/validated_data.parquet
         model_training.lags_hours:
+        - 1
+        - 2
+        - 3
+        - 6
+        - 12
         - 24
+        - 48
+        - 72
         - 168
+        - 336
         model_training.lightgbm_tuning.candidates:
-        - lgbm_lag_only
-        - lgbm_lag_time
-        - lgbm_lag_time_weekend
-        - lgbm_lag_time_season
-        - lgbm_lag_time_gen_core
-        - lgbm_lag_time_gen
+        - lgbm_lag_core
+        - lgbm_lag_calendar
+        - lgbm_lag_calendar_rolling
+        - lgbm_lag_calendar_rolling_gen
         model_training.quantiles:
         - 0.1
         - 0.5
         - 0.9
+        model_training.rolling_std_windows:
+        - 6
+        - 24
+        - 168
+        model_training.rolling_windows:
+        - 3
+        - 6
+        - 12
+        - 24
+        - 168
         model_training.split.train_fraction: 0.8
         model_training.target_col: residual_load_mwh
         model_training.time_col: timestamp
     outs:
     - path: artifacts/stages/00_build_model_dataset
       hash: md5
-      md5: b7a5077d187f713eb6fded4889949976.dir
-      size: 7949
+      md5: bb31e561f10c74aa1093ac43644e6fd0.dir
+      size: 7415
       nfiles: 3
     - path: data/modeling/feature_metadata.json
       hash: md5
-      md5: 971e83dc83c4ea71d7e46e20d50f3cba
-      size: 4386
+      md5: fbfea834fd03b6f3ac513d76a44e491b
+      size: 4606
     - path: data/modeling/model_ready.parquet
       hash: md5
-      md5: be1d304c94cc959984448f28f4d1028a
-      size: 3162107
+      md5: 6907b93ef6f6e1410f45667418c23853
+      size: 6477011
     - path: data/modeling/test.parquet
       hash: md5
-      md5: 1e8e5db88d9518f54137e17df6fa0403
-      size: 739129
+      md5: fa6f76d53bbd72dafb72816cb5f2a372
+      size: 1444744
     - path: data/modeling/train.parquet
       hash: md5
-      md5: 270d77525f64fca9690b5d803c030945
-      size: 2404859
+      md5: 0d3cce4802130c26a21c917c7d062167
+      size: 4975309
   train_models:
     cmd: python3 -m src.modeling.train_models
     deps:
     - path: data/modeling/feature_metadata.json
       hash: md5
-      md5: 971e83dc83c4ea71d7e46e20d50f3cba
-      size: 4386
+      md5: fbfea834fd03b6f3ac513d76a44e491b
+      size: 4606
     - path: data/modeling/test.parquet
       hash: md5
-      md5: 1e8e5db88d9518f54137e17df6fa0403
-      size: 739129
+      md5: fa6f76d53bbd72dafb72816cb5f2a372
+      size: 1444744
     - path: data/modeling/train.parquet
       hash: md5
-      md5: 270d77525f64fca9690b5d803c030945
-      size: 2404859
+      md5: 0d3cce4802130c26a21c917c7d062167
+      size: 4975309
     - path: src/modeling/train_models.py
       hash: md5
-      md5: f5271c13e57089472b54e2dec016f62c
-      size: 72415
+      md5: 7f159e2b9db903ed8f6e960d28973f08
+      size: 78096
     - path: src/utils/reproducibility.py
       hash: md5
       md5: 9a3f8059fa4a691d462639ef5070d80f
@@ -200,9 +209,11 @@ stages:
     params:
       params.yaml:
         global.seed: 42
+        model_training.approval.baseline_max_crossing_rate: 0.007
+        model_training.approval.baseline_min_coverage: 0.75
         model_training.backtest.coverage_tolerance: 0.05
-        model_training.backtest.max_crossing_rate: 0.0
-        model_training.backtest.min_fold_coverage: 0.7
+        model_training.backtest.max_crossing_rate: 0.007
+        model_training.backtest.min_fold_coverage: 0.75
         model_training.backtest.n_splits: 5
         model_training.benchmark.tune.alpha_grid:
         - 0.001
@@ -224,27 +235,25 @@ stages:
           enabled: true
           score_metric: pinball_mean
           candidates:
-          - lgbm_lag_only
-          - lgbm_lag_time
-          - lgbm_lag_time_weekend
-          - lgbm_lag_time_season
-          - lgbm_lag_time_gen_core
-          - lgbm_lag_time_gen
+          - lgbm_lag_core
+          - lgbm_lag_calendar
+          - lgbm_lag_calendar_rolling
+          - lgbm_lag_calendar_rolling_gen
           race_cv_splits: 5
-          race_top_k: 4
+          tune_top_k: 2
           use_full_train_if_small: true
           small_data_threshold: 30000
           fraction:
             max_train_rows: 5000
             cv_splits: 5
           use_full_data_for_tuning: true
-          optuna_trials: 30
+          optuna_trials: 40
           early_stopping_rounds: 50
           significance_alpha: 0.05
           out_of_time_recent_splits: 2
           shap_sample_size: 500
           random_state: 42
-          min_improvement_pct: 0.03
+          min_improvement_pct: 0.01
           search_space:
             learning_rate:
               min: 0.01
@@ -274,11 +283,11 @@ stages:
           enabled: true
           tracking_uri: mlruns
           point_experiment: point_forecast_baselines
-          quantile_lag_experiment: quantile_regression_lag24_lag168
-          quantile_lag_time_experiment: quantile_regression_lag24_lag168_hour_dow
-          lightgbm_lag_time_experiment: lightgbm_quantile_lag24_lag168_hour_dow
-          lightgbm_lag_time_gen_experiment: lightgbm_quantile_lag24_lag168_hour_dow_generation
-          lightgbm_tuning_experiment: lightgbm_quantile_tuning
+          quantile_lag_experiment: quantile_baseline_cyclic
+          quantile_lag_time_experiment: quantile_baseline_cyclic
+          lightgbm_lag_time_experiment: lightgbm_simplified_feature_race
+          lightgbm_lag_time_gen_experiment: lightgbm_simplified_feature_race
+          lightgbm_tuning_experiment: simplified_top2_lgbm_tuning
         model_training.point_models.linear_regression.fit_intercept: true
         model_training.quantile_regression.alpha: 0.01
         model_training.quantile_regression.solver: highs
@@ -291,70 +300,71 @@ stages:
     outs:
     - path: artifacts/metrics/model_training_metrics.json
       hash: md5
-      md5: f224a2068742efb24cad2b06db573348
-      size: 1390
+      md5: 3d66270f982e6f27d776f4687128ddb2
+      size: 5856
     - path: artifacts/models
       hash: md5
-      md5: b367d470f733703c83519fc9aef2c4e8.dir
-      size: 285916
-      nfiles: 4
-    - path: artifacts/stages/01_baseline_screen_tune
-      hash: md5
-      md5: 9d19016d745e5815ca2e4ea08dc88494.dir
-      size: 8084
+      md5: 59605848bf8559b83f35d037b60ece69.dir
+      size: 25083869
       nfiles: 5
-    - path: artifacts/stages/02_lgbm_feature_screen
+    - path: artifacts/stages/01_baseline_calibration
       hash: md5
-      md5: 5c8b4dba187436df7340bfd68f2c50b3.dir
-      size: 4331
-      nfiles: 4
-    - path: artifacts/stages/03_lgbm_tuning
+      md5: edfcd0595731ade8140af308b5d9dcaa.dir
+      size: 4154
+      nfiles: 3
+    - path: artifacts/stages/02_lgbm_feature_race
       hash: md5
-      md5: f8d8cd29f361bdd3ddf5006f3bcb8374.dir
-      size: 4345
+      md5: 1c8d06c106012291113ee6e108bb2251.dir
+      size: 4246
+      nfiles: 3
+    - path: artifacts/stages/03_lgbm_top2_tuning
+      hash: md5
+      md5: 895f1f99fb5bde4f0ad42900d77cbb89.dir
+      size: 26737
       nfiles: 2
-    - path: artifacts/stages/04_test_check
+    - path: artifacts/stages/04_model_selection
       hash: md5
-      md5: 76d0bb019225e7963d2debfd4bb70f2c.dir
-      size: 154413
-      nfiles: 6
-    - path: artifacts/stages/05_final_decision
+      md5: 5492383a101ece41a4633864521ae812.dir
+      size: 16565
+      nfiles: 9
+    - path: artifacts/stages/05_test_report
       hash: md5
-      md5: 49ba96ac9f1db5d790e4e19e1ce8479a.dir
-      size: 5110
-      nfiles: 6
+      md5: 3f85b3feb17ca937b871a2286fbf1f38.dir
+      size: 115069
+      nfiles: 8
     - path: artifacts/stages/06_point_vs_p50_check
       hash: md5
-      md5: 5163ad8eba5048641552a196ce9ab43d.dir
-      size: 373
+      md5: 1f16b488cb628433d2f405982f5bc9bb.dir
+      size: 405
       nfiles: 2
   predict:
     cmd: python3 -m src.modeling.predict
     deps:
     - path: artifacts/models
       hash: md5
-      md5: b367d470f733703c83519fc9aef2c4e8.dir
-      size: 285916
-      nfiles: 4
+      md5: 59605848bf8559b83f35d037b60ece69.dir
+      size: 25083869
+      nfiles: 5
     - path: data/modeling/feature_metadata.json
       hash: md5
-      md5: 971e83dc83c4ea71d7e46e20d50f3cba
-      size: 4386
+      md5: fbfea834fd03b6f3ac513d76a44e491b
+      size: 4606
     - path: data/modeling/test.parquet
       hash: md5
-      md5: 1e8e5db88d9518f54137e17df6fa0403
-      size: 739129
+      md5: fa6f76d53bbd72dafb72816cb5f2a372
+      size: 1444744
     - path: src/modeling/predict.py
       hash: md5
-      md5: b04ffaa56783eb0d997657d0f367aa1d
-      size: 7720
+      md5: d2c53e1d82ced671e365d27b1a2295a7
+      size: 7655
     params:
       params.yaml:
         model_training.inference.input_path: data/modeling/test.parquet
         model_training.inference.manifest_path: artifacts/predictions/prediction_manifest.csv
         model_training.inference.model_paths:
           champion: artifacts/models/champion.joblib
-          challenger: artifacts/models/challenger_tuned.joblib
+          challenger_1: artifacts/models/challenger_1_tuned.joblib
+          challenger_2: artifacts/models/challenger_2_tuned.joblib
           baseline: artifacts/models/baseline_locked.joblib
         model_training.inference.output_dir: artifacts/predictions/models
         model_training.inference.output_path: artifacts/predictions/champion_predictions.parquet
@@ -368,43 +378,43 @@ stages:
     outs:
     - path: artifacts/predictions/champion_predictions.parquet
       hash: md5
-      md5: e76378c98f077edff551fe5eb25be4c4
-      size: 192877
+      md5: f17fe670dea192dab7a5535d307d725d
+      size: 191159
     - path: artifacts/predictions/models
       hash: md5
-      md5: e8898416bd6a4aa031da1bd2f7948671.dir
-      size: 573631
-      nfiles: 3
+      md5: ce730673a9c1552fd6af8e8bc7d2f467.dir
+      size: 764686
+      nfiles: 4
     - path: artifacts/predictions/prediction_manifest.csv
       hash: md5
-      md5: 5cb73ba615e2221f1890d3a83024787d
-      size: 652
+      md5: c76b723d765f0ea771fbaf51197aea37
+      size: 1283
     - path: artifacts/stages/07_predict
       hash: md5
-      md5: 12e001ddfcc56c1d1b788923feb8cbba.dir
-      size: 1273
+      md5: 6cb0773cce007459d4a81661d3597b03.dir
+      size: 2010
       nfiles: 3
   evaluate_pilot:
     cmd: python3 -m src.modeling.evaluate_pilot
     deps:
     - path: artifacts/predictions/models
       hash: md5
-      md5: e8898416bd6a4aa031da1bd2f7948671.dir
-      size: 573631
-      nfiles: 3
+      md5: ce730673a9c1552fd6af8e8bc7d2f467.dir
+      size: 764686
+      nfiles: 4
     - path: artifacts/predictions/prediction_manifest.csv
       hash: md5
-      md5: 5cb73ba615e2221f1890d3a83024787d
-      size: 652
+      md5: c76b723d765f0ea771fbaf51197aea37
+      size: 1283
     - path: src/modeling/evaluate_pilot.py
       hash: md5
-      md5: 2eed854bd68b5fb0cb894e38935a8949
-      size: 8671
+      md5: 17dbcda08fef19b1fcd7d3e36eda1486
+      size: 10160
     params:
       params.yaml:
         model_training.backtest.coverage_tolerance: 0.05
-        model_training.backtest.max_crossing_rate: 0.0
-        model_training.backtest.min_fold_coverage: 0.7
+        model_training.backtest.max_crossing_rate: 0.007
+        model_training.backtest.min_fold_coverage: 0.75
         model_training.inference.manifest_path: artifacts/predictions/prediction_manifest.csv
         model_training.inference.output_dir: artifacts/predictions/models
         model_training.inference.pilot_metrics_path: artifacts/metrics/pilot_evaluation_metrics.json
@@ -416,29 +426,29 @@ stages:
     outs:
     - path: artifacts/metrics/pilot_evaluation_metrics.json
       hash: md5
-      md5: 98f6a5cc6add90a38723235f7d04c5fa
-      size: 2556
+      md5: 89244b4cdf0c221a1324a841b72e25db
+      size: 4152
     - path: artifacts/stages/08_evaluate_pilot
       hash: md5
-      md5: 6ad462e3481eca71bd9944dceb604aea.dir
-      size: 4688
+      md5: 62677b46a482e3cbafaf816ec62a0024.dir
+      size: 7134
       nfiles: 4
   plot_predictions:
     cmd: python3 -m src.visualization.plot_predictions
     deps:
     - path: artifacts/predictions/models
       hash: md5
-      md5: e8898416bd6a4aa031da1bd2f7948671.dir
-      size: 573631
-      nfiles: 3
+      md5: ce730673a9c1552fd6af8e8bc7d2f467.dir
+      size: 764686
+      nfiles: 4
     - path: artifacts/predictions/prediction_manifest.csv
       hash: md5
-      md5: 5cb73ba615e2221f1890d3a83024787d
-      size: 652
+      md5: c76b723d765f0ea771fbaf51197aea37
+      size: 1283
     - path: src/visualization/plot_predictions.py
       hash: md5
-      md5: 07c944e889b533fb0ac6beccd3364de1
-      size: 9010
+      md5: feb0526a2884fbb1c524c088fb04856b
+      size: 9517
     params:
       params.yaml:
         model_training.inference.manifest_path: artifacts/predictions/prediction_manifest.csv
@@ -454,11 +464,11 @@ stages:
     outs:
     - path: artifacts/figures/predictions
       hash: md5
-      md5: d90fcde74b384f033c9c3b16efd4014f.dir
-      size: 2651334
-      nfiles: 13
+      md5: 572cd13ba96d763cae7963aa05876a8b.dir
+      size: 3633401
+      nfiles: 17
     - path: artifacts/stages/09_plot_predictions
       hash: md5
-      md5: 969d025f96ed814cb332261adeccbe38.dir
-      size: 1853
+      md5: 0993a844db6d0dccb6edcddb1e06609d.dir
+      size: 2350
       nfiles: 1
